@@ -1,0 +1,47 @@
+name: HeavyBandManager
+options:
+  bundleIdPrefix: com.keithbarney
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "17.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: 1
+    DEVELOPMENT_TEAM: BXKNJTU253
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1"
+
+schemes:
+  HeavyBandManager:
+    build:
+      targets:
+        HeavyBandManager: all
+    run:
+      config: Debug
+
+targets:
+  HeavyBandManager:
+    type: application
+    platform: iOS
+    sources:
+      - HeavyBandManager
+    settings:
+      base:
+        INFOPLIST_FILE: HeavyBandManager/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.keithbarney.heavybandmanager
+    dependencies:
+      - package: Supabase
+    entitlements:
+      path: HeavyBandManager/HeavyBandManager.entitlements
+      properties:
+        com.apple.developer.applesignin:
+          - Default
+
+packages:
+  Supabase:
+    url: https://github.com/supabase/supabase-swift
+    majorVersion: 2.0.0
