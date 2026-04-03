@@ -18,6 +18,15 @@ stack: swiftui
 | Calendar - Month View | 10:2 | Views/CalendarMonthView.swift | 6-month scrollable grid with overlap dots |
 | Day Detail Sheet | 12:2 | Views/DayDetailSheet.swift | Member availability, overlap windows, schedule |
 | Settings | 13:2 | Views/SettingsView.swift | Profile, band, calendar, appearance |
+| Member Edit | 19:2 | Views/SettingsView.swift (MemberEditView) | Profile edit with avatar, name, instrument |
+
+## Component Mapping
+
+| Figma Component | Node ID | Code File | Notes |
+|----------------|---------|-----------|-------|
+| MemberAvatar | 16:9 | Views/Components/MemberAvatar.swift | Variant set: Size=32, 36, 64 |
+| ToastView | 17:12 | Views/Components/ToastView.swift | Variant set: Type=Success, Error, Info |
+| DevUserPicker | 18:3 | Views/Components/DevUserPicker.swift | DEBUG-only 2-column user card grid |
 
 ## Color Variables
 
