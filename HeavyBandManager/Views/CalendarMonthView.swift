@@ -47,6 +47,24 @@ struct CalendarMonthView: View {
                 .padding(.horizontal, 8)
                 .padding(.bottom, 4)
 
+                HStack(spacing: 16) {
+                    HStack(spacing: 5) {
+                        Circle().fill(Color.themeSuccess).frame(width: 7, height: 7)
+                        Text("Everyone free")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack(spacing: 5) {
+                        Circle().fill(Color.themeWarning).frame(width: 7, height: 7)
+                        Text("Some free")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 6)
+
                 Divider().background(Color.themeBorder)
             }
             .background(Color.themeBg)
