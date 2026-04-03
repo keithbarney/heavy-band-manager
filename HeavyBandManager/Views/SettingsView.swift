@@ -221,12 +221,15 @@ struct SettingsView: View {
                 #if DEBUG
                 Section {
                     ForEach(devUsers) { user in
+                        let isCurrentUser = authManager.user?.email == user.email
                         Button {
+                            guard !isCurrentUser else { return }
                             Task {
                                 bandManager.cleanup()
                                 await authManager.signInWithEmail(user.email, password: user.password)
                                 try? await Task.sleep(for: .milliseconds(500))
                                 await bandManager.loadBands()
+                                toastManager.show("Switched to \(user.name)", type: .success)
                             }
                         } label: {
                             HStack(spacing: 12) {
@@ -238,9 +241,16 @@ struct SettingsView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Text("Switch").font(.caption.bold())
+                                if isCurrentUser {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(.green)
+                                } else {
+                                    Text("Switch").font(.caption.bold())
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
+                        .disabled(isCurrentUser)
                     }
                 } header: {
                     Text("Dev Users")
