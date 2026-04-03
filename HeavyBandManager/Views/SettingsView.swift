@@ -1,510 +1,512 @@
 import SwiftUI
-import Supabase
+import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var bandManager: BandManager
     @EnvironmentObject var calendarManager: CalendarManager
+    @EnvironmentObject var toastManager: ToastManager
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .light
-    @State private var showCalendarPicker = false
-    @State private var showPracticeWindowPicker = false
     @State private var isSyncing = false
+    @State private var editingBandName = false
+    @State private var bandNameText = ""
+    @State private var showLogoPicker = false
+    @State private var isUploadingLogo = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                Text("Settings")
-                    .font(.largeTitle).bold()
-                    .foregroundColor(.themeTextPrimary)
-                    .padding(.horizontal, 20)
+        NavigationStack {
+            List {
+                // MARK: - Profile
+                Section {
+                    if let member = bandManager.currentMember {
+                        HStack(spacing: 12) {
+                            MemberAvatar(member: member, size: 56)
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Text(member.name).font(.headline)
+                                    if bandManager.isLeader {
+                                        Text("Leader")
+                                            .font(.caption2.bold())
+                                            .foregroundColor(.orange)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color.orange.opacity(0.15))
+                                            .clipShape(Capsule())
+                                    }
+                                }
+                                if let email = authManager.user?.email {
+                                    Text(email)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Profile")
+                }
 
-                // Profile
-                sectionHeader("PROFILE")
-                profileCard
-                    .padding(.horizontal, 20)
+                // MARK: - Band
+                Section {
+                    if bandManager.isLeader {
+                        Button {
+                            bandNameText = bandManager.currentBand?.name ?? ""
+                            editingBandName = true
+                        } label: {
+                            HStack {
+                                Text("Name")
+                                Spacer()
+                                Text(bandManager.currentBand?.name ?? "—")
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .foregroundStyle(.primary)
+                    } else {
+                        LabeledContent("Name", value: bandManager.currentBand?.name ?? "—")
+                    }
 
-                // Calendar
-                sectionHeader("CALENDAR")
-                calendarCard
-                    .padding(.horizontal, 20)
+                    if bandManager.isLeader {
+                        Button {
+                            showLogoPicker = true
+                        } label: {
+                            HStack {
+                                Text("Logo")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                if isUploadingLogo {
+                                    ProgressView()
+                                } else if let logoUrl = bandManager.currentBand?.logoUrl, let url = URL(string: logoUrl) {
+                                    AsyncImage(url: url) { image in
+                                        image.resizable().scaledToFill()
+                                    } placeholder: {
+                                        ProgressView()
+                                    }
+                                    .frame(width: 36, height: 36)
+                                    .clipShape(Circle())
+                                } else {
+                                    Circle()
+                                        .fill(Color.themeAccent.opacity(0.2))
+                                        .frame(width: 36, height: 36)
+                                        .overlay(
+                                            Image(systemName: "camera")
+                                                .font(.caption)
+                                                .foregroundStyle(Color.themeAccent)
+                                        )
+                                }
+                            }
+                        }
+                        .sheet(isPresented: $showLogoPicker) {
+                            ImageCropPicker(isPresented: $showLogoPicker) { image in
+                                Task { await handleLogoImage(image) }
+                            }
+                        }
+                    }
 
-                // Band
-                sectionHeader("BAND")
-                bandCard
-                    .padding(.horizontal, 20)
+                    ForEach(bandManager.members) { member in
+                        NavigationLink {
+                            MemberEditView(member: member)
+                                .environmentObject(bandManager)
+                        } label: {
+                            memberBandRow(member)
+                        }
+                    }
 
-                // Dev User Picker (DEBUG only)
-                #if DEBUG
-                sectionHeader("DEV USERS")
-                devUserSection
-                    .padding(.horizontal, 20)
-                #endif
+                    Button {
+                        UIPasteboard.general.string = bandManager.currentBand?.inviteCode
+                        toastManager.show("Invite code copied")
+                    } label: {
+                        HStack {
+                            Text("Invite Code")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Text(bandManager.currentBand?.inviteCode ?? "—")
+                                .font(.body.monospaced())
+                                .foregroundStyle(.secondary)
+                            Image(systemName: "doc.on.doc")
+                                .font(.caption)
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                } header: {
+                    Text("Band")
+                }
 
-                // Appearance
-                sectionHeader("APPEARANCE")
-                VStack(spacing: 0) {
-                    Picker("", selection: $appearanceMode) {
+                // MARK: - Calendar
+                Section {
+                    if !calendarManager.isAuthorized {
+                        Button {
+                            Task { await calendarManager.requestAccess() }
+                        } label: {
+                            Label("Connect Calendar", systemImage: "calendar.badge.plus")
+                        }
+                    } else {
+                        LabeledContent("Status") {
+                            HStack(spacing: 4) {
+                                Circle().fill(.green).frame(width: 8, height: 8)
+                                Text("Connected").foregroundStyle(.green)
+                            }
+                        }
+
+                        NavigationLink {
+                            calendarSourcesList
+                        } label: {
+                            LabeledContent("Sources", value: "\(calendarManager.selectedCalendarIds.count) selected")
+                        }
+
+                        NavigationLink {
+                            practiceWindowPicker
+                        } label: {
+                            LabeledContent("Practice Window") {
+                                if let member = bandManager.currentMember {
+                                    Text("\(TimeHelpers.formatTime(member.practiceWindowStart)) – \(TimeHelpers.formatTime(member.practiceWindowEnd))")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+
+                        LabeledContent("Calendar Name") {
+                            TextField("Band Practice", text: $calendarManager.practiceCalendarName)
+                                .multilineTextAlignment(.trailing)
+                                .foregroundStyle(.secondary)
+                                .onChange(of: calendarManager.practiceCalendarName) { _, _ in
+                                    calendarManager.savePrefs()
+                                }
+                        }
+
+                        Toggle("Auto-sync on open", isOn: $calendarManager.autoSync)
+                            .onChange(of: calendarManager.autoSync) { _, _ in
+                                calendarManager.savePrefs()
+                            }
+
+                        Button {
+                            Task { await syncCalendar() }
+                        } label: {
+                            HStack {
+                                if isSyncing {
+                                    ProgressView()
+                                } else {
+                                    Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
+                                }
+                                Spacer()
+                                if let lastSync = calendarManager.lastSyncDate {
+                                    Text(formatLastSync(lastSync))
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                        }
+                        .disabled(isSyncing)
+                    }
+                } header: {
+                    Text("Calendar")
+                }
+
+                // MARK: - Appearance
+                Section {
+                    Picker("Appearance", selection: $appearanceMode) {
                         ForEach(AppearanceMode.allCases, id: \.self) { mode in
                             Text(mode.rawValue).tag(mode)
                         }
                     }
                     .pickerStyle(.segmented)
-                    .padding()
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                } header: {
+                    Text("Appearance")
                 }
-                .background(Color(.secondarySystemGroupedBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .padding(.horizontal, 20)
 
-                // Account
-                sectionHeader("ACCOUNT")
-                VStack(spacing: 0) {
-                    Button {
+                // MARK: - Dev Users
+                #if DEBUG
+                Section {
+                    ForEach(devUsers) { user in
+                        Button {
+                            Task {
+                                bandManager.cleanup()
+                                await authManager.signInWithEmail(user.email, password: user.password)
+                                try? await Task.sleep(for: .milliseconds(500))
+                                await bandManager.loadBands()
+                            }
+                        } label: {
+                            HStack(spacing: 12) {
+                                Text(user.emoji)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(user.name).font(.subheadline.bold())
+                                        .foregroundColor(user.color)
+                                    Text(user.instrument).font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Text("Switch").font(.caption.bold())
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Dev Users")
+                }
+                #endif
+
+                // MARK: - Account
+                Section {
+                    Button(role: .destructive) {
                         Task {
                             bandManager.cleanup()
                             await authManager.signOut()
                         }
                     } label: {
-                        HStack {
-                            Text("Sign Out")
-                                .foregroundColor(.themeDanger)
-                            Spacer()
-                        }
-                        .padding()
+                        Text("Sign Out")
                     }
                 }
-                .background(Color.themeBgSecondary)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .padding(.horizontal, 20)
 
                 // Version
-                Text("Heavy Band Manager v0.1.0")
-                    .font(.caption)
-                    .foregroundColor(.themeTextTertiary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 8)
-            }
-            .padding(.top, 20)
-            .padding(.bottom, 40)
-        }
-        .background(Color.themeBg)
-    }
-
-    // MARK: - Components
-
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.footnote.bold())
-            .foregroundColor(.themeTextTertiary)
-            .padding(.horizontal, 20)
-    }
-
-    private var profileCard: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                if let member = bandManager.currentMember {
-                    Circle()
-                        .fill(Color(hex: member.color))
-                        .frame(width: 44, height: 44)
-                        .overlay(
-                            Text(String(member.name.prefix(1)).uppercased())
-                                .font(.headline.bold())
-                                .foregroundColor(.white)
-                        )
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 4) {
-                            Text(member.name)
-                                .font(.headline)
-                                .foregroundColor(.themeTextPrimary)
-                            if bandManager.isLeader {
-                                Text("Leader")
-                                    .font(.caption2.bold())
-                                    .foregroundColor(.themeWarning)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.themeWarning.opacity(0.15))
-                                    .clipShape(Capsule())
-                            }
-                        }
-                        if let instrument = member.instrument, !instrument.isEmpty {
-                            Text(instrument)
-                                .font(.subheadline)
-                                .foregroundColor(.themeTextSecondary)
-                        }
-                    }
+                Section {
+                    Text("Heavy Band Manager v0.1.0")
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
                 }
-                Spacer()
             }
-            .padding()
-
-            if let email = authManager.user?.email {
-                Divider().background(Color.themeBorder)
-                HStack {
-                    Text(email)
-                        .font(.subheadline)
-                        .foregroundColor(.themeTextSecondary)
-                    Spacer()
+            .listStyle(.insetGrouped)
+            .navigationTitle("Settings")
+            .alert("Edit Band Name", isPresented: $editingBandName) {
+                TextField("Band name", text: $bandNameText)
+                Button("Cancel", role: .cancel) {}
+                Button("Save") {
+                    Task { await bandManager.updateBandName(bandNameText) }
                 }
-                .padding()
             }
         }
-        .background(Color.themeBgSecondary)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
-    private var bandCard: some View {
-        VStack(spacing: 0) {
-            settingsRow("Name", value: bandManager.currentBand?.name ?? "—")
-            Divider().background(Color.themeBorder).padding(.leading, 16)
+    // MARK: - Member Band Row
 
-            // Members list
-            ForEach(bandManager.members) { member in
-                HStack(spacing: 12) {
-                    Circle()
-                        .fill(Color(hex: member.color))
-                        .frame(width: 28, height: 28)
-                        .overlay(
-                            Text(String(member.name.prefix(1)).uppercased())
-                                .font(.caption2.bold())
-                                .foregroundColor(.white)
-                        )
-                    Text(member.name)
-                        .foregroundColor(.themeTextPrimary)
-                    if member.userId == bandManager.currentBand?.leaderId {
-                        Text("👑")
-                    }
-                    Spacer()
-                    if let instrument = member.instrument, !instrument.isEmpty {
-                        Text(instrument)
-                            .font(.caption)
-                            .foregroundColor(.themeTextTertiary)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                Divider().background(Color.themeBorder).padding(.leading, 56)
-            }
-
-            // Invite code
-            HStack {
-                Text("Invite Code")
-                    .foregroundColor(.themeTextPrimary)
-                Spacer()
-                Text(bandManager.currentBand?.inviteCode ?? "—")
-                    .font(.body.bold().monospaced())
-                    .foregroundColor(.themeTextSecondary)
-                Button {
-                    UIPasteboard.general.string = bandManager.currentBand?.inviteCode
-                } label: {
-                    Image(systemName: "doc.on.doc")
+    private func memberBandRow(_ member: BandMember) -> some View {
+        HStack(spacing: 12) {
+            MemberAvatar(member: member, size: 32)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(member.name)
+                    .font(.body)
+                if let instrument = member.instrument, !instrument.isEmpty {
+                    Text(instrument)
                         .font(.caption)
-                        .foregroundColor(.themeAccent)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .padding()
-        }
-        .background(Color.themeBgSecondary)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
-
-    #if DEBUG
-    private var devUserSection: some View {
-        VStack(spacing: 8) {
-            ForEach(devUsers) { user in
-                Button {
-                    Task {
-                        bandManager.cleanup()
-                        await authManager.signInWithEmail(user.email, password: user.password)
-                    }
-                } label: {
-                    HStack(spacing: 12) {
-                        Text(user.emoji)
-                            .font(.title3)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(user.name)
-                                .font(.subheadline.bold())
-                                .foregroundColor(user.color)
-                            Text(user.instrument)
-                                .font(.caption)
-                                .foregroundColor(.themeTextSecondary)
-                        }
-                        Spacer()
-                        Text("Switch")
-                            .font(.caption.bold())
-                            .foregroundColor(.themeAccent)
-                    }
-                    .padding()
-                    .background(Color.themeSurfaceElevated)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
+            Spacer()
+            if member.userId == bandManager.currentBand?.leaderId {
+                Image(systemName: "crown.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
             }
         }
     }
-    #endif
 
-    // MARK: - Calendar
+    // MARK: - Helpers
 
-    private var calendarCard: some View {
-        VStack(spacing: 0) {
-            if !calendarManager.isAuthorized {
-                // Not connected
-                Button {
-                    Task { await calendarManager.requestAccess() }
-                } label: {
-                    HStack {
-                        Image(systemName: "calendar.badge.plus")
-                            .foregroundColor(.themeAccent)
-                        Text("Connect Calendar")
-                            .foregroundColor(.themeAccent)
-                        Spacer()
-                    }
-                    .padding()
-                }
-            } else {
-                // Status
-                HStack {
-                    Text("Status")
-                        .foregroundColor(.themeTextPrimary)
-                    Spacer()
-                    HStack(spacing: 4) {
-                        Circle().fill(Color.themeSuccess).frame(width: 8, height: 8)
-                        Text("Connected")
-                            .foregroundColor(.themeSuccess)
-                    }
-                }
-                .padding()
-
-                Divider().background(Color.themeBorder).padding(.leading, 16)
-
-                // Sources
-                Button {
-                    showCalendarPicker = true
-                } label: {
-                    HStack {
-                        Text("Sources")
-                            .foregroundColor(.themeTextPrimary)
-                        Spacer()
-                        Text("\(calendarManager.selectedCalendarIds.count) selected")
-                            .foregroundColor(.themeTextSecondary)
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(.themeTextTertiary)
-                    }
-                    .padding()
-                }
-
-                Divider().background(Color.themeBorder).padding(.leading, 16)
-
-                // Practice Window
-                Button {
-                    showPracticeWindowPicker = true
-                } label: {
-                    HStack {
-                        Text("Practice Window")
-                            .foregroundColor(.themeTextPrimary)
-                        Spacer()
-                        if let member = bandManager.currentMember {
-                            Text("\(TimeHelpers.formatTime(member.practiceWindowStart)) – \(TimeHelpers.formatTime(member.practiceWindowEnd))")
-                                .foregroundColor(.themeTextSecondary)
-                        }
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(.themeTextTertiary)
-                    }
-                    .padding()
-                }
-
-                Divider().background(Color.themeBorder).padding(.leading, 16)
-
-                // Calendar Name
-                HStack {
-                    Text("Calendar Name")
-                        .foregroundColor(.themeTextPrimary)
-                    Spacer()
-                    TextField("Band Practice", text: $calendarManager.practiceCalendarName)
-                        .multilineTextAlignment(.trailing)
-                        .foregroundColor(.themeTextSecondary)
-                        .frame(maxWidth: 180)
-                        .onChange(of: calendarManager.practiceCalendarName) { _, _ in
-                            calendarManager.savePrefs()
-                        }
-                }
-                .padding()
-
-                Divider().background(Color.themeBorder).padding(.leading, 16)
-
-                // Auto-sync toggle
-                Toggle(isOn: $calendarManager.autoSync) {
-                    Text("Auto-sync on open")
-                        .foregroundColor(.themeTextPrimary)
-                }
-                .tint(.themeAccent)
-                .padding()
-                .onChange(of: calendarManager.autoSync) { _, _ in
-                    calendarManager.savePrefs()
-                }
-
-                Divider().background(Color.themeBorder).padding(.leading, 16)
-
-                // Sync Now
-                Button {
-                    Task { await syncCalendar() }
-                } label: {
-                    HStack {
-                        if isSyncing {
-                            ProgressView().tint(.themeAccent)
-                        } else {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .foregroundColor(.themeAccent)
-                        }
-                        Text("Sync Now")
-                            .foregroundColor(.themeAccent)
-                        Spacer()
-                        if let lastSync = calendarManager.lastSyncDate {
-                            Text(lastSync, style: .relative)
-                                .font(.caption)
-                                .foregroundColor(.themeTextTertiary)
-                        }
-                    }
-                    .padding()
-                }
-                .disabled(isSyncing)
-            }
+    private static func resizedImage(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
+        let size = image.size
+        guard max(size.width, size.height) > maxDimension else { return image }
+        let scale = maxDimension / max(size.width, size.height)
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
         }
-        .background(Color.themeBgSecondary)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .sheet(isPresented: $showCalendarPicker) {
-            calendarPickerSheet
-        }
-        .sheet(isPresented: $showPracticeWindowPicker) {
-            practiceWindowSheet
-        }
+    }
+
+    private func handleLogoImage(_ image: UIImage) async {
+        isUploadingLogo = true
+        defer { isUploadingLogo = false }
+        let resized = Self.resizedImage(image, maxDimension: 512)
+        guard let jpegData = resized.jpegData(compressionQuality: 0.7) else { return }
+        await bandManager.uploadBandLogo(imageData: jpegData)
+    }
+
+    private static let lastSyncFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .none
+        f.timeStyle = .short
+        return f
+    }()
+
+    private func formatLastSync(_ date: Date) -> String {
+        let interval = Date().timeIntervalSince(date)
+        if interval < 60 { return "Just now" }
+        if interval < 3600 { return "\(Int(interval / 60))m ago" }
+        if interval < 86400 { return "\(Int(interval / 3600))h ago" }
+        return Self.lastSyncFormatter.string(from: date)
     }
 
     private func syncCalendar() async {
         isSyncing = true
-        defer { isSyncing = false }
-
-        // Sync current month
-        let calendar = Calendar.current
-        let now = Date()
-        let comps = calendar.dateComponents([.year, .month], from: now)
-        let monthStart = calendar.date(from: comps)!
-        let monthEnd = calendar.date(byAdding: .month, value: 1, to: monthStart)!
-
-        await bandManager.syncCalendar(calendarManager: calendarManager, from: monthStart, to: monthEnd)
+        let start = Date()
+        let end = Calendar.current.date(byAdding: .month, value: 2, to: start) ?? start
+        await bandManager.syncCalendar(calendarManager: calendarManager, from: start, to: end)
+        isSyncing = false
     }
 
-    // MARK: - Calendar Picker Sheet
+    // MARK: - Calendar Sources List
+    private var calendarSourcesList: some View {
+        List {
+            ForEach(calendarManager.deviceCalendars) { cal in
+                Button {
+                    calendarManager.toggleCalendar(cal.id)
+                } label: {
+                    HStack {
+                        Circle().fill(Color(cgColor: cal.color)).frame(width: 12, height: 12)
+                        Text(cal.title)
+                        Spacer()
+                        if calendarManager.selectedCalendarIds.contains(cal.id) {
+                            Image(systemName: "checkmark").foregroundStyle(.blue)
+                        }
+                    }
+                }
+                .foregroundStyle(.primary)
+            }
+        }
+        .navigationTitle("Calendar Sources")
+        .navigationBarTitleDisplayMode(.inline)
+    }
 
-    private var calendarPickerSheet: some View {
-        NavigationStack {
-            List {
-                ForEach(calendarManager.deviceCalendars) { cal in
-                    Button {
-                        calendarManager.toggleCalendar(cal.id)
-                    } label: {
-                        HStack(spacing: 12) {
-                            Circle()
-                                .fill(Color(cgColor: cal.color))
-                                .frame(width: 12, height: 12)
-                            Text(cal.title)
-                                .foregroundColor(.themeTextPrimary)
-                            Spacer()
-                            if calendarManager.selectedCalendarIds.contains(cal.id) {
-                                Image(systemName: "checkmark")
-                                    .foregroundColor(.themeAccent)
+    // MARK: - Practice Window Picker
+    private var practiceWindowPicker: some View {
+        Form {
+            Section {
+                Picker("Start", selection: Binding(
+                    get: { bandManager.currentMember?.practiceWindowStart ?? 960 },
+                    set: { newVal in Task { try? await bandManager.updatePracticeWindow(start: newVal, end: bandManager.currentMember?.practiceWindowEnd ?? 1380) } }
+                )) {
+                    ForEach(Array(stride(from: 0, through: 1380, by: 30)), id: \.self) { minutes in
+                        Text(TimeHelpers.formatTime(minutes)).tag(minutes)
+                    }
+                }
+
+                Picker("End", selection: Binding(
+                    get: { bandManager.currentMember?.practiceWindowEnd ?? 1380 },
+                    set: { newVal in Task { try? await bandManager.updatePracticeWindow(start: bandManager.currentMember?.practiceWindowStart ?? 960, end: newVal) } }
+                )) {
+                    ForEach(Array(stride(from: 0, through: 1410, by: 30)), id: \.self) { minutes in
+                        Text(TimeHelpers.formatTime(minutes)).tag(minutes)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Practice Window")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Member Edit View
+
+struct MemberEditView: View {
+    @EnvironmentObject var bandManager: BandManager
+    let member: BandMember
+
+    @State private var instrumentText: String = ""
+    @State private var nameText: String = ""
+    @State private var showPhotoPicker = false
+    @State private var isUploadingPhoto = false
+
+    private var isCurrentUser: Bool {
+        member.id == bandManager.currentMember?.id
+    }
+
+    private var canEditInstrument: Bool {
+        isCurrentUser || bandManager.isLeader
+    }
+
+    var body: some View {
+        List {
+            // Avatar + name header
+            Section {
+                HStack(spacing: 16) {
+                    if isCurrentUser {
+                        Button {
+                            showPhotoPicker = true
+                        } label: {
+                            ZStack(alignment: .bottomTrailing) {
+                                MemberAvatar(member: member, size: 64)
+                                if isUploadingPhoto {
+                                    ProgressView()
+                                        .frame(width: 64, height: 64)
+                                }
+                                Image(systemName: "camera.circle.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(.white, .tint)
+                                    .offset(x: 2, y: 2)
                             }
                         }
-                    }
-                }
-            }
-            .listStyle(.insetGrouped)
-            .navigationTitle("Calendar Sources")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { showCalendarPicker = false }
-                }
-            }
-        }
-        .presentationDetents([.medium])
-    }
-
-    // MARK: - Practice Window Sheet
-
-    @State private var tempWindowStart = 960
-    @State private var tempWindowEnd = 1380
-
-    private var practiceWindowSheet: some View {
-        NavigationStack {
-            VStack(spacing: 24) {
-                HStack {
-                    Text("Start").foregroundColor(.themeTextSecondary)
-                    Spacer()
-                    Picker("", selection: $tempWindowStart) {
-                        ForEach(Array(stride(from: 0, through: 1410, by: 30)), id: \.self) { minutes in
-                            Text(TimeHelpers.formatTime(minutes)).tag(minutes)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .tint(.themeAccent)
-                }
-                .padding(.horizontal)
-
-                HStack {
-                    Text("End").foregroundColor(.themeTextSecondary)
-                    Spacer()
-                    Picker("", selection: $tempWindowEnd) {
-                        ForEach(Array(stride(from: 0, through: 1410, by: 30)), id: \.self) { minutes in
-                            Text(TimeHelpers.formatTime(minutes)).tag(minutes)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .tint(.themeAccent)
-                }
-                .padding(.horizontal)
-
-                Spacer()
-            }
-            .padding(.top, 20)
-            .navigationTitle("Practice Window")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { showPracticeWindowPicker = false }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        Task {
-                            if let member = bandManager.currentMember {
-                                try? await Config.supabase
-                                    .from("band_members")
-                                    .update(["practice_window_start": AnyJSON.integer(tempWindowStart), "practice_window_end": AnyJSON.integer(tempWindowEnd)])
-                                    .eq("id", value: member.id.uuidString)
-                                    .execute()
-                                await bandManager.loadBands()
+                        .sheet(isPresented: $showPhotoPicker) {
+                            ImageCropPicker(isPresented: $showPhotoPicker) { image in
+                                Task { await handlePhotoImage(image) }
                             }
-                            showPracticeWindowPicker = false
+                        }
+                    } else {
+                        MemberAvatar(member: member, size: 64)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(member.name)
+                            .font(.title3.bold())
+                        if let instrument = member.instrument, !instrument.isEmpty {
+                            Text(instrument)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        if member.userId == bandManager.currentBand?.leaderId {
+                            Text("Band Leader")
+                                .font(.caption.bold())
+                                .foregroundColor(.orange)
                         }
                     }
                 }
+                .padding(.vertical, 4)
             }
-            .onAppear {
-                if let member = bandManager.currentMember {
-                    tempWindowStart = member.practiceWindowStart
-                    tempWindowEnd = member.practiceWindowEnd
+
+            // Editable fields
+            if isCurrentUser {
+                Section("Name") {
+                    TextField("Your name", text: $nameText)
+                        .onSubmit {
+                            Task { await bandManager.updateMemberName(nameText) }
+                        }
+                }
+            }
+
+            if canEditInstrument {
+                Section("Instrument") {
+                    TextField("Instrument", text: $instrumentText)
+                        .onSubmit {
+                            Task { await bandManager.updateMemberInstrument(instrumentText, memberId: member.id) }
+                        }
                 }
             }
         }
-        .presentationDetents([.medium])
+        .listStyle(.insetGrouped)
+        .navigationTitle(isCurrentUser ? "Edit Profile" : member.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            instrumentText = member.instrument ?? ""
+            nameText = member.name
+        }
     }
 
-    private func settingsRow(_ label: String, value: String) -> some View {
-        HStack {
-            Text(label).foregroundColor(.themeTextPrimary)
-            Spacer()
-            Text(value).foregroundColor(.themeTextSecondary)
-        }
-        .padding()
+    private func handlePhotoImage(_ image: UIImage) async {
+        isUploadingPhoto = true
+        defer { isUploadingPhoto = false }
+        let resized = resizedImage(image, maxDimension: 512)
+        guard let jpegData = resized.jpegData(compressionQuality: 0.7) else { return }
+        await bandManager.uploadAvatar(imageData: jpegData)
+    }
+
+    private func resizedImage(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
+        let size = image.size
+        guard max(size.width, size.height) > maxDimension else { return image }
+        let scale = maxDimension / max(size.width, size.height)
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: newSize)) }
     }
 }

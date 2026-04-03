@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct OnboardingView: View {
+    @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var bandManager: BandManager
 
     enum Step { case welcome, create, join }
@@ -13,189 +14,187 @@ struct OnboardingView: View {
     @State private var inviteCode = ""
     @State private var isSubmitting = false
     @State private var errorMessage: String?
+    @State private var didPrefill = false
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 32) {
-                    switch step {
-                    case .welcome: welcomeContent
-                    case .create: createContent
-                    case .join: joinContent
-                    }
+            Group {
+                switch step {
+                case .welcome: welcomeView
+                case .create: createView
+                case .join: joinView
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 60)
             }
-            .background(Color.themeBg)
+            .onAppear {
+                if !didPrefill {
+                    if let appleName = authManager.appleFullName, !appleName.isEmpty {
+                        userName = appleName
+                    }
+                    if userName.isEmpty, let email = authManager.user?.email {
+                        userName = email.components(separatedBy: "@").first ?? ""
+                    }
+                    didPrefill = true
+                }
+            }
         }
     }
 
     // MARK: - Welcome
 
-    private var welcomeContent: some View {
-        VStack(spacing: 32) {
-            Text("🎸")
-                .font(.system(size: 56))
-            Text("Heavy Band Manager")
-                .font(.largeTitle).bold()
-                .foregroundColor(.themeTextPrimary)
-            Text("Find practice times that work for everyone.")
-                .font(.body)
-                .foregroundColor(.themeTextSecondary)
-
-            VStack(spacing: 12) {
-                actionCard(title: "Create a Band", subtitle: "Start a new band and invite members", icon: "plus.circle.fill", color: .themeAccent) {
-                    step = .create
+    private var welcomeView: some View {
+        List {
+            Section {
+                VStack(spacing: 12) {
+                    Text("🎸")
+                        .font(.system(size: 56))
+                    Text("Heavy Band Manager")
+                        .font(.largeTitle).bold()
+                    Text("Find practice times that work for everyone.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
-                actionCard(title: "Join a Band", subtitle: "Enter an invite code from your bandmate", icon: "person.badge.plus", color: .themeSuccess) {
+                .frame(maxWidth: .infinity)
+                .multilineTextAlignment(.center)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .padding(.vertical, 24)
+            }
+
+            Section {
+                Button {
+                    step = .create
+                } label: {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Create a Band")
+                            Text("Start a new band and invite members")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundStyle(.blue)
+                            .font(.title2)
+                    }
+                }
+
+                Button {
                     step = .join
+                } label: {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Join a Band")
+                            Text("Enter an invite code from your bandmate")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "person.badge.plus")
+                            .foregroundStyle(.green)
+                            .font(.title2)
+                    }
                 }
             }
         }
+        .listStyle(.insetGrouped)
     }
 
     // MARK: - Create
 
-    private var createContent: some View {
-        VStack(spacing: 24) {
-            Text("Create a Band")
-                .font(.largeTitle).bold()
-                .foregroundColor(.themeTextPrimary)
-
-            VStack(spacing: 0) {
-                formField("Band Name", text: $bandName)
-                Divider().background(Color.themeBorder)
-                formField("Your Name", text: $userName)
-                Divider().background(Color.themeBorder)
-                formField("Instrument", text: $instrument, placeholder: "Optional")
+    private var createView: some View {
+        Form {
+            Section {
+                TextField("Band Name", text: $bandName)
+                TextField("Your Name", text: $userName)
+                TextField("Instrument (optional)", text: $instrument)
             }
-            .background(Color.themeBgSecondary)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
 
             if let error = errorMessage {
-                Text(error).font(.footnote).foregroundColor(.themeDanger)
+                Section {
+                    Text(error)
+                        .foregroundStyle(.red)
+                        .font(.footnote)
+                }
             }
 
-            HStack(spacing: 12) {
-                Button("Back") { step = .welcome }
-                    .foregroundColor(.themeAccent)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Color.themeBgSecondary)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-
+            Section {
                 Button {
                     Task { await createBand() }
                 } label: {
                     if isSubmitting {
-                        ProgressView().tint(.white)
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
+                        }
                     } else {
                         Text("Get Started")
+                            .frame(maxWidth: .infinity)
+                            .bold()
                     }
                 }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(bandName.isEmpty || userName.isEmpty ? Color.themeAccent.opacity(0.3) : Color.themeAccent)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
                 .disabled(bandName.isEmpty || userName.isEmpty || isSubmitting)
+            }
+        }
+        .navigationTitle("Create a Band")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Back") { step = .welcome }
             }
         }
     }
 
     // MARK: - Join
 
-    private var joinContent: some View {
-        VStack(spacing: 24) {
-            Text("Join a Band")
-                .font(.largeTitle).bold()
-                .foregroundColor(.themeTextPrimary)
-
-            VStack(spacing: 0) {
-                VStack(spacing: 4) {
-                    Text("Invite Code")
-                        .font(.footnote)
-                        .foregroundColor(.themeTextSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    TextField("HBM-XXXX", text: $inviteCode)
-                        .font(.title2.bold().monospaced())
-                        .multilineTextAlignment(.center)
-                        .autocapitalization(.allCharacters)
-                        .foregroundColor(.themeTextPrimary)
-                }
-                .padding()
-
-                Divider().background(Color.themeBorder)
-                formField("Your Name", text: $userName)
-                Divider().background(Color.themeBorder)
-                formField("Instrument", text: $instrument, placeholder: "Optional")
+    private var joinView: some View {
+        Form {
+            Section(header: Text("Invite Code")) {
+                TextField("HBM-XXXX", text: $inviteCode)
+                    .font(.title2.bold().monospaced())
+                    .multilineTextAlignment(.center)
+                    .textInputAutocapitalization(.characters)
             }
-            .background(Color.themeBgSecondary)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+
+            Section {
+                TextField("Your Name", text: $userName)
+                TextField("Instrument (optional)", text: $instrument)
+            }
 
             if let error = errorMessage {
-                Text(error).font(.footnote).foregroundColor(.themeDanger)
+                Section {
+                    Text(error)
+                        .foregroundStyle(.red)
+                        .font(.footnote)
+                }
             }
 
-            HStack(spacing: 12) {
-                Button("Back") { step = .welcome }
-                    .foregroundColor(.themeAccent)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Color.themeBgSecondary)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-
+            Section {
                 Button {
                     Task { await joinBand() }
                 } label: {
                     if isSubmitting {
-                        ProgressView().tint(.white)
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
+                        }
                     } else {
                         Text("Join Band")
+                            .frame(maxWidth: .infinity)
+                            .bold()
                     }
                 }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(inviteCode.isEmpty || userName.isEmpty ? Color.themeSuccess.opacity(0.3) : Color.themeSuccess)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
                 .disabled(inviteCode.isEmpty || userName.isEmpty || isSubmitting)
             }
         }
-    }
-
-    // MARK: - Components
-
-    private func actionCard(title: String, subtitle: String, icon: String, color: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 16) {
-                Image(systemName: icon)
-                    .font(.title2)
-                    .foregroundColor(color)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.headline).foregroundColor(.themeTextPrimary)
-                    Text(subtitle).font(.subheadline).foregroundColor(.themeTextSecondary)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .foregroundColor(.themeTextTertiary)
+        .navigationTitle("Join a Band")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Back") { step = .welcome }
             }
-            .padding()
-            .background(Color.themeBgSecondary)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
         }
-    }
-
-    private func formField(_ label: String, text: Binding<String>, placeholder: String = "") -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.footnote)
-                .foregroundColor(.themeTextSecondary)
-            TextField(placeholder.isEmpty ? label : placeholder, text: text)
-                .foregroundColor(.themeTextPrimary)
-        }
-        .padding()
     }
 
     // MARK: - Actions

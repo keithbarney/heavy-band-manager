@@ -5,7 +5,7 @@ import Supabase
 final class BandManager: ObservableObject {
     @Published var bands: [BandWithMembers] = []
     @Published var currentBand: BandWithMembers?
-    @Published var members: [BandMember] = []
+    var members: [BandMember] { currentBand?.bandMembers ?? [] }
     @Published var slots: [AvailabilitySlot] = []
     @Published var practices: [ScheduledPractice] = []
     @Published var isLoading = true
@@ -41,14 +41,32 @@ final class BandManager: ObservableObject {
         error = nil
 
         do {
+            let userId = try currentUserId()
+
+            // Step 1: Find which bands the user belongs to via band_members
+            let myMemberships: [BandMember] = try await Config.supabase
+                .from("band_members")
+                .select()
+                .eq("user_id", value: userId.uuidString)
+                .execute()
+                .value
+
+            guard let membership = myMemberships.first else {
+                bands = []
+                currentBand = nil
+                return
+            }
+
+            // Step 2: Fetch that band
             let fetchedBands: [Band] = try await Config.supabase
                 .from("bands")
                 .select()
-                .order("created_at", ascending: false)
+                .eq("id", value: membership.bandId.uuidString)
                 .execute()
                 .value
 
             if let first = fetchedBands.first {
+                // Step 3: Fetch all members of this band
                 let fetchedMembers: [BandMember] = try await Config.supabase
                     .from("band_members")
                     .select()
@@ -64,20 +82,20 @@ final class BandManager: ObservableObject {
                     leaderId: first.leaderId,
                     defaultPracticeLocation: first.defaultPracticeLocation,
                     inviteCode: first.inviteCode,
+                    logoUrl: first.logoUrl,
                     createdAt: first.createdAt,
                     bandMembers: fetchedMembers
                 )
 
                 bands = [bandWithMembers]
                 currentBand = bandWithMembers
-                members = fetchedMembers
-                await loadSlots()
-                await loadPractices()
+                async let slotsLoad: Void = loadSlots()
+                async let practicesLoad: Void = loadPractices()
+                _ = await (slotsLoad, practicesLoad)
                 subscribeToChanges()
             }
         } catch {
             self.error = error.localizedDescription
-            print("BandManager loadBands error: \(error)")
         }
     }
 
@@ -126,39 +144,17 @@ final class BandManager: ObservableObject {
     // MARK: - Create Band
 
     func createBand(name: String, userName: String, instrument: String?) async throws {
-        let userId = try currentUserId()
-        let inviteCode = generateInviteCode()
-
-        let bandData: [String: AnyJSON] = [
-            "name": .string(name),
-            "creator_id": .string(userId.uuidString),
-            "leader_id": .string(userId.uuidString),
-            "invite_code": .string(inviteCode),
+        // Use SECURITY DEFINER function to bypass RLS for atomic band + member creation
+        let params: [String: AnyJSON] = [
+            "p_band_name": .string(name),
+            "p_member_name": .string(userName),
+            "p_instrument": instrument.map { .string($0) } ?? .null,
+            "p_color": .string(MemberColors.palette[0].hexString),
         ]
 
-        let band: Band = try await Config.supabase
-            .from("bands")
-            .insert(bandData)
-            .select()
-            .single()
+        try await Config.supabase
+            .rpc("create_band_with_member", params: params)
             .execute()
-            .value
-
-        let memberData: [String: AnyJSON] = [
-            "band_id": .string(band.id.uuidString),
-            "user_id": .string(userId.uuidString),
-            "name": .string(userName),
-            "instrument": instrument.map { .string($0) } ?? .null,
-            "color": .string(MemberColors.palette[0].hexString),
-        ]
-
-        let _: BandMember = try await Config.supabase
-            .from("band_members")
-            .insert(memberData)
-            .select()
-            .single()
-            .execute()
-            .value
 
         await loadBands()
     }
@@ -214,8 +210,9 @@ final class BandManager: ObservableObject {
 
     // MARK: - Schedule Practice
 
-    func schedulePractice(date: String, startMinutes: Int, endMinutes: Int, location: String?) async {
+    func schedulePractice(date: String, startMinutes: Int, endMinutes: Int, location: String?, calendarManager: CalendarManager? = nil) async {
         guard let bandId = currentBand?.id else { return }
+        let bandName = currentBand?.name ?? "Band"
         let userId = try? currentUserId()
         let data: [String: AnyJSON] = [
             "band_id": .string(bandId.uuidString),
@@ -226,21 +223,51 @@ final class BandManager: ObservableObject {
             "scheduled_by": .string(userId?.uuidString ?? ""),
         ]
         do {
-            let _: ScheduledPractice = try await Config.supabase
+            let practice: ScheduledPractice = try await Config.supabase
                 .from("scheduled_practices")
                 .insert(data)
                 .select()
                 .single()
                 .execute()
                 .value
+
+            // Create Apple Calendar event if calendar manager is available
+            if let cm = calendarManager, let practiceDate = TimeHelpers.date(from: date) {
+                do {
+                    let eventId = try await cm.createPracticeEvent(
+                        date: practiceDate,
+                        startMinutes: startMinutes,
+                        endMinutes: endMinutes,
+                        bandName: bandName,
+                        location: location
+                    )
+                    // Save the calendar_event_id back to Supabase
+                    try await Config.supabase
+                        .from("scheduled_practices")
+                        .update(["calendar_event_id": AnyJSON.string(eventId)])
+                        .eq("id", value: practice.id.uuidString)
+                        .execute()
+                } catch {
+                    // Calendar event creation failed — practice is still saved to Supabase
+                    print("Calendar event creation skipped: \(error.localizedDescription)")
+                }
+            }
+
             await loadPractices()
         } catch {
             self.error = error.localizedDescription
         }
     }
 
-    func cancelPractice(_ practiceId: UUID) async {
+    func cancelPractice(_ practiceId: UUID, calendarManager: CalendarManager? = nil) async {
         do {
+            // Find the practice to get its calendar_event_id before deleting
+            if let cm = calendarManager,
+               let practice = practices.first(where: { $0.id == practiceId }),
+               let eventId = practice.calendarEventId {
+                try? await cm.deletePracticeEvent(eventIdentifier: eventId)
+            }
+
             try await Config.supabase
                 .from("scheduled_practices")
                 .delete()
@@ -250,6 +277,40 @@ final class BandManager: ObservableObject {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    // MARK: - Calendar Sync for Existing Practices
+
+    /// Creates calendar events for any scheduled practices that are missing a calendar_event_id.
+    /// Call this on app launch after practices have been loaded.
+    func syncMissingCalendarEvents(calendarManager: CalendarManager) async {
+        guard let bandName = currentBand?.name else { return }
+        guard calendarManager.isAuthorized else { return }
+
+        let needsSync = practices.filter { $0.calendarEventId == nil }
+        guard !needsSync.isEmpty else { return }
+
+        for practice in needsSync {
+            guard let practiceDate = TimeHelpers.date(from: practice.date) else { continue }
+            do {
+                let eventId = try await calendarManager.createPracticeEvent(
+                    date: practiceDate,
+                    startMinutes: practice.startMinutes,
+                    endMinutes: practice.endMinutes,
+                    bandName: bandName,
+                    location: practice.location
+                )
+                try await Config.supabase
+                    .from("scheduled_practices")
+                    .update(["calendar_event_id": AnyJSON.string(eventId)])
+                    .eq("id", value: practice.id.uuidString)
+                    .execute()
+            } catch {
+                print("Failed to sync calendar event for practice \(practice.id): \(error.localizedDescription)")
+            }
+        }
+        // Reload to pick up the updated calendar_event_id values
+        await loadPractices()
     }
 
     // MARK: - Calendar Sync
@@ -281,19 +342,21 @@ final class BandManager: ObservableObject {
                 .lte("date", value: endStr)
                 .execute()
 
-            // Insert new slots
-            for slot in newSlots {
-                let data: [String: AnyJSON] = [
-                    "member_id": .string(member.id.uuidString),
-                    "band_id": .string(bandId.uuidString),
-                    "date": .string(slot.date),
-                    "start_minutes": .integer(slot.startMinutes),
-                    "end_minutes": .integer(slot.endMinutes),
-                    "confirmed": .bool(true),
-                ]
+            // Insert new slots in a single batch
+            if !newSlots.isEmpty {
+                let rows: [[String: AnyJSON]] = newSlots.map { slot in
+                    [
+                        "member_id": .string(member.id.uuidString),
+                        "band_id": .string(bandId.uuidString),
+                        "date": .string(slot.date),
+                        "start_minutes": .integer(slot.startMinutes),
+                        "end_minutes": .integer(slot.endMinutes),
+                        "confirmed": .bool(true),
+                    ]
+                }
                 try await Config.supabase
                     .from("availability_slots")
-                    .insert(data)
+                    .insert(rows)
                     .execute()
             }
 
@@ -353,17 +416,107 @@ final class BandManager: ObservableObject {
         practicesChannel = nil
         bands = []
         currentBand = nil
-        members = []
         slots = []
         practices = []
     }
 
-    // MARK: - Helpers
+    // MARK: - Avatar Upload
 
-    private func generateInviteCode() -> String {
-        let chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-        let code = String((0..<4).map { _ in chars.randomElement()! })
-        return "HBM-\(code)"
+    func uploadAvatar(imageData: Data) async {
+        guard let member = currentMember else { return }
+        let path = "\(member.id.uuidString).jpg"
+
+        do {
+            // Upload to storage
+            try await Config.supabase.storage
+                .from("avatars")
+                .upload(path, data: imageData, options: .init(contentType: "image/jpeg", upsert: true))
+
+            // Get public URL
+            let publicURL = try Config.supabase.storage
+                .from("avatars")
+                .getPublicURL(path: path)
+
+            // Update band_members row
+            try await Config.supabase
+                .from("band_members")
+                .update(["avatar_url": AnyJSON.string(publicURL.absoluteString)])
+                .eq("id", value: member.id.uuidString)
+                .execute()
+
+            await loadBands()
+        } catch {
+            self.error = error.localizedDescription
+            print("Avatar upload error: \(error)")
+        }
+    }
+
+    // MARK: - Practice Window
+
+    func updatePracticeWindow(start: Int, end: Int) async throws {
+        guard let member = currentMember else { return }
+        try await Config.supabase
+            .from("band_members")
+            .update(["practice_window_start": AnyJSON.integer(start), "practice_window_end": AnyJSON.integer(end)])
+            .eq("id", value: member.id.uuidString)
+            .execute()
+        await loadBands()
+    }
+
+    func updateMemberName(_ name: String) async {
+        guard let member = currentMember, !name.isEmpty else { return }
+        do {
+            try await Config.supabase
+                .from("band_members")
+                .update(["name": AnyJSON.string(name)])
+                .eq("id", value: member.id.uuidString)
+                .execute()
+            await loadBands()
+        } catch { print("Update name error: \(error)") }
+    }
+
+    func updateMemberInstrument(_ instrument: String, memberId: UUID? = nil) async {
+        let targetId = memberId ?? currentMember?.id
+        guard let id = targetId else { return }
+        do {
+            try await Config.supabase
+                .from("band_members")
+                .update(["instrument": AnyJSON.string(instrument)])
+                .eq("id", value: id.uuidString)
+                .execute()
+            await loadBands()
+        } catch { print("Update instrument error: \(error)") }
+    }
+
+    func updateBandName(_ name: String) async {
+        guard let band = currentBand, !name.isEmpty, isLeader else { return }
+        do {
+            try await Config.supabase
+                .from("bands")
+                .update(["name": AnyJSON.string(name)])
+                .eq("id", value: band.id.uuidString)
+                .execute()
+            await loadBands()
+        } catch { print("Update band name error: \(error)") }
+    }
+
+    func uploadBandLogo(imageData: Data) async {
+        guard let band = currentBand, isLeader else { return }
+        let path = "bands/\(band.id.uuidString)/logo.jpg"
+        do {
+            try await Config.supabase.storage
+                .from("avatars")
+                .upload(path, data: imageData, options: .init(contentType: "image/jpeg", upsert: true))
+            let publicURL = try Config.supabase.storage
+                .from("avatars")
+                .getPublicURL(path: path)
+            try await Config.supabase
+                .from("bands")
+                .update(["logo_url": AnyJSON.string(publicURL.absoluteString)])
+                .eq("id", value: band.id.uuidString)
+                .execute()
+            await loadBands()
+        } catch { print("Upload band logo error: \(error)") }
     }
 }
 

@@ -7,6 +7,7 @@ struct Band: Identifiable, Codable {
     let leaderId: UUID
     let defaultPracticeLocation: String?
     let inviteCode: String
+    let logoUrl: String?
     let createdAt: Date
 
     enum CodingKeys: String, CodingKey {
@@ -15,6 +16,7 @@ struct Band: Identifiable, Codable {
         case leaderId = "leader_id"
         case defaultPracticeLocation = "default_practice_location"
         case inviteCode = "invite_code"
+        case logoUrl = "logo_url"
         case createdAt = "created_at"
     }
 }
@@ -28,6 +30,7 @@ struct BandMember: Identifiable, Codable {
     let color: String
     let practiceWindowStart: Int
     let practiceWindowEnd: Int
+    let avatarUrl: String?
     let joinedAt: Date
 
     enum CodingKeys: String, CodingKey {
@@ -36,6 +39,7 @@ struct BandMember: Identifiable, Codable {
         case userId = "user_id"
         case practiceWindowStart = "practice_window_start"
         case practiceWindowEnd = "practice_window_end"
+        case avatarUrl = "avatar_url"
         case joinedAt = "joined_at"
     }
 }
@@ -103,6 +107,7 @@ struct BandWithMembers: Identifiable, Codable {
     let leaderId: UUID
     let defaultPracticeLocation: String?
     let inviteCode: String
+    let logoUrl: String?
     let createdAt: Date
     let bandMembers: [BandMember]
 
@@ -112,6 +117,7 @@ struct BandWithMembers: Identifiable, Codable {
         case leaderId = "leader_id"
         case defaultPracticeLocation = "default_practice_location"
         case inviteCode = "invite_code"
+        case logoUrl = "logo_url"
         case createdAt = "created_at"
         case bandMembers = "band_members"
     }

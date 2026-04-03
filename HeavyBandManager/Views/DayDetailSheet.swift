@@ -2,20 +2,27 @@ import SwiftUI
 
 struct DayDetailSheet: View {
     @EnvironmentObject var bandManager: BandManager
+    @EnvironmentObject var calendarManager: CalendarManager
     @Environment(\.dismiss) private var dismiss
 
     let date: String
 
     @State private var showScheduleAlert = false
     @State private var selectedWindow: OverlapWindow?
+    @State private var showRemoveAlert = false
+    @State private var practiceToRemove: ScheduledPractice?
+    @EnvironmentObject var toastManager: ToastManager
 
     private var dayPractices: [ScheduledPractice] {
         bandManager.practices.filter { $0.date == date }
     }
 
+    private var daySlots: [AvailabilitySlot] {
+        bandManager.slots.filter { $0.date == date }
+    }
+
     private var dayWindows: [OverlapWindow] {
-        let daySlots = bandManager.slots.filter { $0.date == date }
-        return OverlapEngine.compute(
+        OverlapEngine.compute(
             slots: daySlots,
             totalMembers: bandManager.members.count,
             minMembers: 2
@@ -24,47 +31,39 @@ struct DayDetailSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    // Scheduled practices
-                    if !dayPractices.isEmpty {
-                        sectionHeader("SCHEDULED")
-                        VStack(spacing: 0) {
-                            ForEach(dayPractices) { practice in
-                                practiceRow(practice)
-                                if practice.id != dayPractices.last?.id {
-                                    Divider().background(Color.themeBorder).padding(.leading, 16)
-                                }
-                            }
+            List {
+                // Scheduled practices
+                if !dayPractices.isEmpty {
+                    Section {
+                        ForEach(dayPractices) { practice in
+                            practiceRow(practice)
                         }
-                        .background(Color.themeBgSecondary)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-
-                    // Overlap windows
-                    if dayWindows.isEmpty {
-                        VStack(spacing: 8) {
-                            Text("No overlap found")
-                                .font(.headline)
-                                .foregroundColor(.themeTextPrimary)
-                            Text("Members need to sync their calendars")
-                                .font(.subheadline)
-                                .foregroundColor(.themeTextSecondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(32)
-                    } else {
-                        sectionHeader("AVAILABLE WINDOWS")
-                        VStack(spacing: 12) {
-                            ForEach(dayWindows) { window in
-                                windowCard(window)
-                            }
-                        }
+                    } header: {
+                        Text("Scheduled")
                     }
                 }
-                .padding(20)
+
+                // Member availability
+                Section {
+                    ForEach(bandManager.members) { member in
+                        memberRow(member)
+                    }
+                } header: {
+                    Text("Availability")
+                }
+
+                // Best windows
+                if !dayWindows.isEmpty {
+                    Section {
+                        ForEach(dayWindows) { window in
+                            windowRow(window)
+                        }
+                    } header: {
+                        Text("Best Windows")
+                    }
+                }
             }
-            .background(Color.themeBg)
+            .listStyle(.insetGrouped)
             .navigationTitle(TimeHelpers.fullDisplayDate(date))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -73,7 +72,7 @@ struct DayDetailSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
         .alert("Schedule Practice", isPresented: $showScheduleAlert) {
             Button("Cancel", role: .cancel) {}
             Button("Schedule") {
@@ -83,8 +82,11 @@ struct DayDetailSheet: View {
                             date: date,
                             startMinutes: w.startMinutes,
                             endMinutes: w.endMinutes,
-                            location: bandManager.currentBand?.defaultPracticeLocation
+                            location: bandManager.currentBand?.defaultPracticeLocation,
+                            calendarManager: calendarManager
                         )
+                        toastManager.show("Practice scheduled", type: .success)
+                        dismiss()
                     }
                 }
             }
@@ -93,85 +95,124 @@ struct DayDetailSheet: View {
                 Text("\(TimeHelpers.formatTime(w.startMinutes)) – \(TimeHelpers.formatTime(w.endMinutes)) (\(TimeHelpers.formatDuration(w.duration)))")
             }
         }
+        .alert("Remove Practice", isPresented: $showRemoveAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Remove", role: .destructive) {
+                if let practice = practiceToRemove {
+                    Task {
+                        await bandManager.cancelPractice(practice.id, calendarManager: calendarManager)
+                        toastManager.show("Practice removed")
+                        dismiss()
+                    }
+                }
+            }
+        } message: {
+            Text("This will remove the scheduled practice and delete the calendar event.")
+        }
     }
 
-    // MARK: - Components
+    // MARK: - Member Row
 
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.footnote.bold())
-            .foregroundColor(.themeTextTertiary)
+    private func memberRow(_ member: BandMember) -> some View {
+        let memberSlots = daySlots.filter { $0.memberId == member.id }
+
+        return HStack(spacing: 12) {
+            Circle()
+                .fill(Color(hex: member.color))
+                .frame(width: 32, height: 32)
+                .overlay(
+                    Text(String(member.name.prefix(1)).uppercased())
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(member.name)
+                    .font(.body)
+
+                if memberSlots.isEmpty {
+                    Text("Not available")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text(memberSlots.map { "\(TimeHelpers.formatTime($0.startMinutes)) – \(TimeHelpers.formatTime($0.endMinutes))" }.joined(separator: ", "))
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Spacer()
+
+            if !memberSlots.isEmpty {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                    .font(.title3)
+            } else {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(.secondary.opacity(0.4))
+                    .font(.title3)
+            }
+        }
+        .padding(.vertical, 4)
     }
+
+    // MARK: - Practice Row
 
     private func practiceRow(_ practice: ScheduledPractice) -> some View {
         HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Color.themeSuccess)
-                .frame(width: 4, height: 32)
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.green)
+                .frame(width: 4, height: 36)
+
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(TimeHelpers.formatTime(practice.startMinutes)) – \(TimeHelpers.formatTime(practice.endMinutes))")
                     .font(.headline)
-                    .foregroundColor(.themeTextPrimary)
                 if let loc = practice.location, !loc.isEmpty {
                     Text(loc)
                         .font(.subheadline)
-                        .foregroundColor(.themeTextSecondary)
+                        .foregroundColor(.secondary)
                 }
             }
+
             Spacer()
+
             if bandManager.isLeader {
                 Button {
-                    Task { await bandManager.cancelPractice(practice.id) }
+                    practiceToRemove = practice
+                    showRemoveAlert = true
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.themeDanger)
+                    Text("Remove")
+                        .font(.subheadline)
+                        .foregroundColor(.red)
                 }
             }
         }
-        .padding()
     }
 
-    private func windowCard(_ window: OverlapWindow) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Text("\(TimeHelpers.formatTime(window.startMinutes)) – \(TimeHelpers.formatTime(window.endMinutes))")
-                            .font(.headline)
-                        Text("(\(TimeHelpers.formatDuration(window.duration)))")
-                            .font(.subheadline)
-                            .foregroundColor(.themeTextTertiary)
-                    }
-                    .foregroundColor(.themeTextPrimary)
-                }
-                Spacer()
-                Text("\(window.freeMembers.count)/\(window.totalMembers)")
-                    .font(.subheadline.bold())
-                    .foregroundColor(.themeTextSecondary)
-            }
+    // MARK: - Window Row
 
-            if window.freeMembers.count == window.totalMembers {
-                Text("Everyone free")
-                    .font(.caption.bold())
-                    .foregroundColor(.themeSuccess)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.themeSuccess.opacity(0.15))
-                    .clipShape(Capsule())
-            }
+    private func windowRow(_ window: OverlapWindow) -> some View {
+        let freeMembers = bandManager.members.filter { window.freeMembers.contains($0.id) }
 
-            // Member dots
-            HStack(spacing: 8) {
-                ForEach(bandManager.members) { member in
-                    let isFree = window.freeMembers.contains(member.id)
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(Color(hex: member.color).opacity(isFree ? 1 : 0.3))
-                            .frame(width: 10, height: 10)
-                        Text(member.name.components(separatedBy: " ").first ?? member.name)
-                            .font(.caption2)
-                            .foregroundColor(isFree ? .themeTextSecondary : .themeTextTertiary)
-                    }
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("\(TimeHelpers.formatTime(window.startMinutes)) – \(TimeHelpers.formatTime(window.endMinutes))")
+                .font(.headline)
+
+            // Only show available members
+            HStack(spacing: -6) {
+                ForEach(freeMembers) { member in
+                    Circle()
+                        .fill(Color(hex: member.color))
+                        .frame(width: 26, height: 26)
+                        .overlay(
+                            Text(String(member.name.prefix(1)).uppercased())
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.white)
+                        )
+                        .overlay(
+                            Circle()
+                                .strokeBorder(Color(.systemBackground), lineWidth: 2)
+                        )
                 }
             }
 
@@ -181,17 +222,15 @@ struct DayDetailSheet: View {
                     showScheduleAlert = true
                 } label: {
                     Text("Schedule This")
-                        .font(.subheadline.bold())
+                        .font(.body.bold())
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 36)
-                        .background(Color.themeAccent)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .frame(height: 48)
+                        .background(Color.green)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
             }
         }
-        .padding()
-        .background(Color.themeBgSecondary)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(.vertical, 4)
     }
 }

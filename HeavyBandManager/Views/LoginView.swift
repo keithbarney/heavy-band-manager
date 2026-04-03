@@ -27,16 +27,20 @@ struct LoginView: View {
 
             // Sign In
             VStack(spacing: 16) {
-                SignInWithAppleButton(.signIn) { request in
-                    request.requestedScopes = [.fullName, .email]
-                } onCompletion: { _ in
-                    // Handled by AuthManager's Apple Sign-In flow
-                }
-                .signInWithAppleButtonStyle(.white)
-                .frame(height: 50)
-                .cornerRadius(12)
-                .onTapGesture {
+                Button(action: {
                     authManager.signInWithApple()
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "apple.logo")
+                            .font(.system(size: 18, weight: .medium))
+                        Text("Sign in with Apple")
+                            .font(.system(size: 17, weight: .medium))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(.black)
+                    .cornerRadius(12)
                 }
 
                 if let error = authManager.error {

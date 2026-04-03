@@ -10,7 +10,15 @@ struct BandGate: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color.themeBg)
             } else if bandManager.currentBand == nil {
-                OnboardingView()
+                VStack {
+                    if let error = bandManager.error {
+                        Text("DEBUG: \(error)")
+                            .font(.caption2)
+                            .foregroundStyle(.red)
+                            .padding()
+                    }
+                    OnboardingView()
+                }
             } else {
                 BandTabs()
             }

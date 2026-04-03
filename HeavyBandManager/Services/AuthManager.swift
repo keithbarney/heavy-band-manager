@@ -9,6 +9,7 @@ final class AuthManager: ObservableObject {
     @Published var session: Session?
     @Published var isLoading = true
     @Published var error: String?
+    @Published var appleFullName: String?
 
     private var authStateTask: Task<Void, Never>?
 
@@ -58,8 +59,9 @@ final class AuthManager: ObservableObject {
         let delegate = AppleSignInDelegate(nonce: nonce) { [weak self] result in
             Task { @MainActor in
                 switch result {
-                case .success(let idToken):
-                    await self?.handleAppleToken(idToken: idToken, nonce: nonce)
+                case .success(let (idToken, fullName)):
+                    self?.appleFullName = fullName
+                    await self?.handleAppleToken(idToken: idToken, nonce: nonce, fullName: fullName)
                 case .failure(let err):
                     self?.error = err.localizedDescription
                 }
@@ -75,7 +77,7 @@ final class AuthManager: ObservableObject {
         controller.performRequests()
     }
 
-    private func handleAppleToken(idToken: String, nonce: String) async {
+    private func handleAppleToken(idToken: String, nonce: String, fullName: String? = nil) async {
         error = nil
         isLoading = true
         defer { isLoading = false }
@@ -90,6 +92,11 @@ final class AuthManager: ObservableObject {
             )
             self.session = session
             self.user = session.user
+
+            // Save full name to user metadata if Apple provided it
+            if let name = fullName, !name.isEmpty {
+                try? await Config.supabase.auth.update(user: UserAttributes(data: ["full_name": .string(name)]))
+            }
         } catch {
             self.error = error.localizedDescription
         }
@@ -150,9 +157,9 @@ final class AuthManager: ObservableObject {
 
 private class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate {
     let nonce: String
-    let completion: (Result<String, Error>) -> Void
+    let completion: (Result<(String, String?), Error>) -> Void
 
-    init(nonce: String, completion: @escaping (Result<String, Error>) -> Void) {
+    init(nonce: String, completion: @escaping (Result<(String, String?), Error>) -> Void) {
         self.nonce = nonce
         self.completion = completion
     }
@@ -164,7 +171,14 @@ private class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate {
             completion(.failure(NSError(domain: "AppleSignIn", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unable to fetch identity token"])))
             return
         }
-        completion(.success(idTokenString))
+
+        var fullName: String?
+        if let nameComponents = appleIDCredential.fullName {
+            let parts = [nameComponents.givenName, nameComponents.familyName].compactMap { $0 }
+            if !parts.isEmpty { fullName = parts.joined(separator: " ") }
+        }
+
+        completion(.success((idTokenString, fullName)))
     }
 
     func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {

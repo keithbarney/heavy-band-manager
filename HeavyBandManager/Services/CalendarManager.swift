@@ -183,7 +183,7 @@ final class CalendarManager: ObservableObject {
 
     // MARK: - Write Practice Events
 
-    func getOrCreateBandCalendar() -> EKCalendar? {
+    func getOrCreateBandCalendar() throws -> EKCalendar {
         if let existing = store.calendars(for: .event).first(where: { $0.title == practiceCalendarName }) {
             return existing
         }
@@ -200,36 +200,81 @@ final class CalendarManager: ObservableObject {
             calendar.source = store.defaultCalendarForNewEvents?.source
         }
 
-        do {
-            try store.saveCalendar(calendar, commit: true)
-            return calendar
-        } catch {
-            print("Failed to create calendar: \(error)")
-            return nil
-        }
+        try store.saveCalendar(calendar, commit: true)
+        return calendar
     }
 
-    func createPracticeEvent(practice: ScheduledPractice, bandName: String) -> String? {
-        guard let calendar = getOrCreateBandCalendar() else { return nil }
-        guard let practiceDate = TimeHelpers.date(from: practice.date) else { return nil }
+    /// Creates an Apple Calendar event for a scheduled practice.
+    /// Returns the EKEvent identifier string for storage in Supabase.
+    func createPracticeEvent(date: Date, startMinutes: Int, endMinutes: Int, bandName: String, location: String?) async throws -> String {
+        if !isAuthorized {
+            await requestAccess()
+        }
+        guard isAuthorized else {
+            throw CalendarError.accessDenied
+        }
+
+        let calendar = try getOrCreateBandCalendar()
 
         let event = EKEvent(eventStore: store)
         event.title = "\(bandName) Practice"
         event.calendar = calendar
-        event.location = practice.location
+        event.location = location
 
         let cal = Calendar.current
-        var startComps = cal.dateComponents([.year, .month, .day], from: practiceDate)
-        startComps.hour = practice.startMinutes / 60
-        startComps.minute = practice.startMinutes % 60
-        event.startDate = cal.date(from: startComps)!
+        var startComps = cal.dateComponents([.year, .month, .day], from: date)
+        startComps.hour = startMinutes / 60
+        startComps.minute = startMinutes % 60
+        guard let startDate = cal.date(from: startComps) else {
+            throw CalendarError.invalidDate
+        }
+        event.startDate = startDate
 
         var endComps = startComps
-        endComps.hour = practice.endMinutes / 60
-        endComps.minute = practice.endMinutes % 60
-        event.endDate = cal.date(from: endComps)!
+        endComps.hour = endMinutes / 60
+        endComps.minute = endMinutes % 60
+        guard let endDate = cal.date(from: endComps) else {
+            throw CalendarError.invalidDate
+        }
+        event.endDate = endDate
 
+        // 30-minute reminder before the event
+        event.addAlarm(EKAlarm(relativeOffset: -30 * 60))
+
+        try store.save(event, span: .thisEvent)
+        return event.eventIdentifier
+    }
+
+    /// Deletes an Apple Calendar event by its identifier.
+    func deletePracticeEvent(eventIdentifier: String) async throws {
+        guard let event = store.event(withIdentifier: eventIdentifier) else { return }
+        try store.remove(event, span: .thisEvent)
+    }
+
+    /// Legacy wrapper for existing code that passes a ScheduledPractice directly.
+    func createPracticeEvent(practice: ScheduledPractice, bandName: String) -> String? {
+        guard let practiceDate = TimeHelpers.date(from: practice.date) else { return nil }
         do {
+            let calendar = try getOrCreateBandCalendar()
+
+            let event = EKEvent(eventStore: store)
+            event.title = "\(bandName) Practice"
+            event.calendar = calendar
+            event.location = practice.location
+
+            let cal = Calendar.current
+            var startComps = cal.dateComponents([.year, .month, .day], from: practiceDate)
+            startComps.hour = practice.startMinutes / 60
+            startComps.minute = practice.startMinutes % 60
+            event.startDate = cal.date(from: startComps)!
+
+            var endComps = startComps
+            endComps.hour = practice.endMinutes / 60
+            endComps.minute = practice.endMinutes % 60
+            event.endDate = cal.date(from: endComps)!
+
+            event.addAlarm(EKAlarm(relativeOffset: -30 * 60))
+
             try store.save(event, span: .thisEvent)
             return event.eventIdentifier
         } catch {
@@ -293,4 +338,16 @@ struct CalendarPrefs: Codable {
     let lastSyncDate: Date?
     let calendarName: String?
     let autoSync: Bool?
+}
+
+enum CalendarError: LocalizedError {
+    case accessDenied
+    case invalidDate
+
+    var errorDescription: String? {
+        switch self {
+        case .accessDenied: return "Calendar access denied"
+        case .invalidDate: return "Invalid practice date"
+        }
+    }
 }
