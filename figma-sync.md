@@ -27,6 +27,14 @@ stack: swiftui
 | MemberAvatar | 16:9 | Views/Components/MemberAvatar.swift | Variant set: Size=32, 36, 64 |
 | ToastView | 17:12 | Views/Components/ToastView.swift | Variant set: Type=Success, Error, Info |
 | DevUserPicker | 18:3 | Views/Components/DevUserPicker.swift | DEBUG-only 2-column user card grid |
+| TabBar | 21:17 | Views/BandTabs.swift | Variant set: Active=Calendar, Active=Settings |
+| SectionLabel | 22:3 | (inline pattern) | Uppercase section header label |
+| InfoRow | 22:13 | (inline pattern) | Variant set: Trailing=Value, Trailing=Chevron |
+| ActionCard | 22:15 | Views/OnboardingView.swift | Icon + title + subtitle + chevron card |
+| MemberRow | 23:15 | Views/DayDetailSheet.swift | Variant set: Status=Available, Status=Unavailable |
+| PracticeCard | 24:14 | Views/DayDetailSheet.swift | Variant set: Role=Leader, Role=Member |
+| OverlapWindowCard | 25:17 | Views/DayDetailSheet.swift | Variant set: Role=Leader (w/ Schedule), Role=Member |
+| GroupedCard | 25:19 | (inline pattern) | iOS inset grouped card container with dividers |
 
 ## Color Variables
 
