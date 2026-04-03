@@ -100,6 +100,7 @@ final class BandManager: ObservableObject {
     }
 
     func loadSlots(from startDate: String? = nil, to endDate: String? = nil) async {
+        if SCREENSHOT_MODE { return }
         guard let bandId = currentBand?.id else { return }
         do {
             var query = Config.supabase
@@ -121,6 +122,7 @@ final class BandManager: ObservableObject {
     }
 
     func loadPractices(from startDate: String? = nil, to endDate: String? = nil) async {
+        if SCREENSHOT_MODE { return }
         guard let bandId = currentBand?.id else { return }
         do {
             var query = Config.supabase
@@ -517,6 +519,93 @@ final class BandManager: ObservableObject {
                 .execute()
             await loadBands()
         } catch { print("Upload band logo error: \(error)") }
+    }
+
+    // MARK: - Mock Data (for screenshots)
+
+    func loadMockData() {
+        let bandId = UUID()
+        let jamesId = UUID()
+        let mattId = UUID()
+        let danId = UUID()
+        let now = Date()
+
+        let james = BandMember(id: UUID(), bandId: bandId, userId: jamesId, name: "James", instrument: "Vocals", color: "#FF453A", practiceWindowStart: 540, practiceWindowEnd: 1260, avatarUrl: nil, joinedAt: now)
+        let matt = BandMember(id: UUID(), bandId: bandId, userId: mattId, name: "Matt Horwitz", instrument: "Drums", color: "#30D158", practiceWindowStart: 600, practiceWindowEnd: 1200, avatarUrl: nil, joinedAt: now)
+        let dan = BandMember(id: UUID(), bandId: bandId, userId: danId, name: "Dan Smith", instrument: "Bass", color: "#0A84FF", practiceWindowStart: 480, practiceWindowEnd: 1320, avatarUrl: nil, joinedAt: now)
+
+        let band = BandWithMembers(id: bandId, name: "Eighteen Visions", creatorId: jamesId, leaderId: jamesId, defaultPracticeLocation: "The Rehearsal Room", inviteCode: "18V2025", logoUrl: nil, createdAt: now, bandMembers: [james, matt, dan])
+
+        let cal = Calendar.current
+        // Helper to generate date strings for offsets from today
+        func d(_ offset: Int) -> String {
+            TimeHelpers.dateString(from: cal.date(byAdding: .day, value: offset, to: Date())!)
+        }
+
+        self.bands = [band]
+        self.currentBand = band
+        self.isLoading = false
+
+        // Mock slots — spread across the month for a realistic calendar
+        // Today (day 0): all 3 → full overlap (green dot)
+        // Day 1: 2 of 3 → partial (yellow dot)
+        // Day 4: all 3 → full (green) + practice scheduled
+        // Day 5: 2 of 3 → partial (yellow)
+        // Day 6: 2 of 3 → partial (yellow)
+        // Day 7: 2 of 3 → partial (yellow)
+        // Day 11: all 3 → full (green) + practice
+        // Day 12: 2 of 3 → partial (yellow)
+        // Day 18: all 3 → full (green) + practice
+        // Day 19: 2 of 3 → partial (yellow)
+        // Day 25: all 3 → full (green) + practice
+        self.slots = [
+            // Today — all 3
+            AvailabilitySlot(id: UUID(), memberId: james.id, bandId: bandId, date: d(0), startMinutes: 600, endMinutes: 1200, confirmed: true),
+            AvailabilitySlot(id: UUID(), memberId: matt.id, bandId: bandId, date: d(0), startMinutes: 660, endMinutes: 1140, confirmed: true),
+            AvailabilitySlot(id: UUID(), memberId: dan.id, bandId: bandId, date: d(0), startMinutes: 540, endMinutes: 1260, confirmed: true),
+            // Day 1 — 2 of 3
+            AvailabilitySlot(id: UUID(), memberId: james.id, bandId: bandId, date: d(1), startMinutes: 600, endMinutes: 900, confirmed: true),
+            AvailabilitySlot(id: UUID(), memberId: matt.id, bandId: bandId, date: d(1), startMinutes: 720, endMinutes: 1080, confirmed: true),
+            // Day 4 — all 3
+            AvailabilitySlot(id: UUID(), memberId: james.id, bandId: bandId, date: d(4), startMinutes: 600, endMinutes: 1200, confirmed: true),
+            AvailabilitySlot(id: UUID(), memberId: matt.id, bandId: bandId, date: d(4), startMinutes: 600, endMinutes: 1200, confirmed: true),
+            AvailabilitySlot(id: UUID(), memberId: dan.id, bandId: bandId, date: d(4), startMinutes: 600, endMinutes: 1200, confirmed: true),
+            // Day 5 — 2 of 3
+            AvailabilitySlot(id: UUID(), memberId: james.id, bandId: bandId, date: d(5), startMinutes: 600, endMinutes: 1080, confirmed: true),
+            AvailabilitySlot(id: UUID(), memberId: dan.id, bandId: bandId, date: d(5), startMinutes: 720, endMinutes: 1200, confirmed: true),
+            // Day 6 — 2 of 3
+            AvailabilitySlot(id: UUID(), memberId: matt.id, bandId: bandId, date: d(6), startMinutes: 600, endMinutes: 1080, confirmed: true),
+            AvailabilitySlot(id: UUID(), memberId: dan.id, bandId: bandId, date: d(6), startMinutes: 600, endMinutes: 1080, confirmed: true),
+            // Day 7 — 2 of 3
+            AvailabilitySlot(id: UUID(), memberId: james.id, bandId: bandId, date: d(7), startMinutes: 600, endMinutes: 1200, confirmed: true),
+            AvailabilitySlot(id: UUID(), memberId: matt.id, bandId: bandId, date: d(7), startMinutes: 720, endMinutes: 1080, confirmed: true),
+            // Day 11 — all 3
+            AvailabilitySlot(id: UUID(), memberId: james.id, bandId: bandId, date: d(11), startMinutes: 600, endMinutes: 1200, confirmed: true),
+            AvailabilitySlot(id: UUID(), memberId: matt.id, bandId: bandId, date: d(11), startMinutes: 600, endMinutes: 1200, confirmed: true),
+            AvailabilitySlot(id: UUID(), memberId: dan.id, bandId: bandId, date: d(11), startMinutes: 600, endMinutes: 1200, confirmed: true),
+            // Day 12 — 2 of 3
+            AvailabilitySlot(id: UUID(), memberId: james.id, bandId: bandId, date: d(12), startMinutes: 600, endMinutes: 900, confirmed: true),
+            AvailabilitySlot(id: UUID(), memberId: dan.id, bandId: bandId, date: d(12), startMinutes: 660, endMinutes: 1080, confirmed: true),
+            // Day 18 — all 3
+            AvailabilitySlot(id: UUID(), memberId: james.id, bandId: bandId, date: d(18), startMinutes: 600, endMinutes: 1200, confirmed: true),
+            AvailabilitySlot(id: UUID(), memberId: matt.id, bandId: bandId, date: d(18), startMinutes: 600, endMinutes: 1200, confirmed: true),
+            AvailabilitySlot(id: UUID(), memberId: dan.id, bandId: bandId, date: d(18), startMinutes: 600, endMinutes: 1200, confirmed: true),
+            // Day 19 — 2 of 3
+            AvailabilitySlot(id: UUID(), memberId: matt.id, bandId: bandId, date: d(19), startMinutes: 720, endMinutes: 1080, confirmed: true),
+            AvailabilitySlot(id: UUID(), memberId: dan.id, bandId: bandId, date: d(19), startMinutes: 600, endMinutes: 1200, confirmed: true),
+            // Day 25 — all 3
+            AvailabilitySlot(id: UUID(), memberId: james.id, bandId: bandId, date: d(25), startMinutes: 600, endMinutes: 1200, confirmed: true),
+            AvailabilitySlot(id: UUID(), memberId: matt.id, bandId: bandId, date: d(25), startMinutes: 600, endMinutes: 1200, confirmed: true),
+            AvailabilitySlot(id: UUID(), memberId: dan.id, bandId: bandId, date: d(25), startMinutes: 600, endMinutes: 1200, confirmed: true),
+        ]
+
+        // Mock practices — weekly on full-overlap days
+        self.practices = [
+            ScheduledPractice(id: UUID(), bandId: bandId, date: d(4), startMinutes: 660, endMinutes: 780, location: "The Rehearsal Room", scheduledBy: jamesId, scheduledAt: now, calendarEventId: nil),
+            ScheduledPractice(id: UUID(), bandId: bandId, date: d(11), startMinutes: 660, endMinutes: 780, location: "The Rehearsal Room", scheduledBy: jamesId, scheduledAt: now, calendarEventId: nil),
+            ScheduledPractice(id: UUID(), bandId: bandId, date: d(18), startMinutes: 660, endMinutes: 780, location: "The Rehearsal Room", scheduledBy: jamesId, scheduledAt: now, calendarEventId: nil),
+            ScheduledPractice(id: UUID(), bandId: bandId, date: d(25), startMinutes: 660, endMinutes: 780, location: "The Rehearsal Room", scheduledBy: jamesId, scheduledAt: now, calendarEventId: nil),
+        ]
     }
 }
 
