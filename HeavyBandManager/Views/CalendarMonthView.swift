@@ -35,13 +35,13 @@ struct CalendarMonthView: View {
                     HStack(spacing: 12) {
                         HStack(spacing: 4) {
                             Circle().fill(Color.themeSuccess).frame(width: 6, height: 6)
-                            Text("All")
+                            Text("All members")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
                         HStack(spacing: 4) {
                             Circle().fill(Color.themeWarning).frame(width: 6, height: 6)
-                            Text("Some")
+                            Text("Some members")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
