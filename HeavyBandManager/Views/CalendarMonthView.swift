@@ -25,12 +25,27 @@ struct CalendarMonthView: View {
         VStack(spacing: 0) {
             // Fixed header: month name + weekday row
             VStack(alignment: .leading, spacing: 0) {
-                HStack {
+                HStack(alignment: .firstTextBaseline) {
                     Text(visibleMonth.isEmpty ? currentMonthName : visibleMonth)
                         .font(.title.bold())
                         .foregroundColor(.themeTextPrimary)
 
                     Spacer()
+
+                    HStack(spacing: 12) {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.themeSuccess).frame(width: 6, height: 6)
+                            Text("All")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.themeWarning).frame(width: 6, height: 6)
+                            Text("Some")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -46,24 +61,6 @@ struct CalendarMonthView: View {
                 }
                 .padding(.horizontal, 8)
                 .padding(.bottom, 4)
-
-                HStack(spacing: 16) {
-                    HStack(spacing: 5) {
-                        Circle().fill(Color.themeSuccess).frame(width: 7, height: 7)
-                        Text("Everyone free")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    HStack(spacing: 5) {
-                        Circle().fill(Color.themeWarning).frame(width: 7, height: 7)
-                        Text("Some free")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 6)
 
                 Divider().background(Color.themeBorder)
             }
@@ -261,11 +258,7 @@ struct CalendarMonthView: View {
             .frame(maxWidth: .infinity)
             .frame(height: 52)
             .padding(2)
-            .background(
-                quality == .full ? Color.themeSuccess.opacity(0.08) :
-                quality == .partial ? Color.themeWarning.opacity(0.06) :
-                Color.clear
-            )
+            .background(Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
     }
