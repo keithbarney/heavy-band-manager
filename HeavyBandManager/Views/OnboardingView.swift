@@ -44,12 +44,10 @@ struct OnboardingView: View {
     private var welcomeView: some View {
         List {
             Section {
-                VStack(spacing: 12) {
-                    Text("🎸")
-                        .font(.system(size: 56))
+                VStack(spacing: 8) {
                     Text("Band Practice")
                         .font(.largeTitle).bold()
-                    Text("Find the perfect practice time\nfor everyone.")
+                    Text("Find the perfect practice time")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -64,34 +62,42 @@ struct OnboardingView: View {
                 Button {
                     step = .create
                 } label: {
-                    Label {
+                    HStack(spacing: 12) {
+                        Image(systemName: "plus")
+                            .foregroundStyle(.blue)
+                            .font(.title2)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Create a Band")
-                            Text("Start a new band and invite members")
+                                .foregroundStyle(.primary)
+                            Text("Start a new band and invite your crew")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                    } icon: {
-                        Image(systemName: "plus.circle.fill")
-                            .foregroundStyle(.blue)
-                            .font(.title2)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
                     }
                 }
 
                 Button {
                     step = .join
                 } label: {
-                    Label {
+                    HStack(spacing: 12) {
+                        Image(systemName: "plus")
+                            .foregroundStyle(.blue)
+                            .font(.title2)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Join a Band")
+                                .foregroundStyle(.primary)
                             Text("Enter an invite code from your bandmate")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                    } icon: {
-                        Image(systemName: "person.badge.plus")
-                            .foregroundStyle(.green)
-                            .font(.title2)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
                     }
                 }
             }
