@@ -25,7 +25,7 @@ struct SettingsView: View {
                                 HStack(spacing: 4) {
                                     Text(member.name).font(.headline)
                                     if bandManager.isLeader {
-                                        Text("Leader")
+                                        Text("Organizer")
                                             .font(.caption2.bold())
                                             .foregroundColor(.orange)
                                             .padding(.horizontal, 6)
@@ -271,7 +271,7 @@ struct SettingsView: View {
 
                 // Version
                 Section {
-                    Text("Heavy Band Manager v0.1.0")
+                    Text("Band Practice v0.1.0")
                         .font(.footnote)
                         .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity)

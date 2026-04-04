@@ -7,7 +7,7 @@ struct BandManagerApp: App {
     @StateObject private var bandManager = BandManager()
     @StateObject private var calendarManager = CalendarManager()
     @StateObject private var toastManager = ToastManager()
-    @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .dark
+    @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .light
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {

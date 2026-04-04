@@ -47,9 +47,9 @@ struct OnboardingView: View {
                 VStack(spacing: 12) {
                     Text("🎸")
                         .font(.system(size: 56))
-                    Text("Heavy Band Manager")
+                    Text("Band Practice")
                         .font(.largeTitle).bold()
-                    Text("Find practice times that work for everyone.")
+                    Text("Find the perfect practice time\nfor everyone.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

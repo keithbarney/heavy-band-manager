@@ -13,12 +13,12 @@ struct LoginView: View {
                 Text("🎸")
                     .font(.system(size: 64))
 
-                Text("Heavy Band Manager")
-                    .font(.title2.bold())
+                Text("Band Practice")
+                    .font(.system(size: 34, weight: .bold))
                     .foregroundStyle(Color.themeTextPrimary)
 
-                Text("Find practice times that work for everyone.")
-                    .font(.subheadline)
+                Text("Find the perfect practice time\nfor everyone.")
+                    .font(.system(size: 17))
                     .foregroundStyle(Color.themeTextSecondary)
                     .multilineTextAlignment(.center)
             }
@@ -32,15 +32,15 @@ struct LoginView: View {
                 }) {
                     HStack(spacing: 8) {
                         Image(systemName: "apple.logo")
-                            .font(.system(size: 18, weight: .medium))
+                            .font(.system(size: 18, weight: .semibold))
                         Text("Sign in with Apple")
-                            .font(.system(size: 17, weight: .medium))
+                            .font(.system(size: 17, weight: .semibold))
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.themeBg)
                     .frame(maxWidth: .infinity)
                     .frame(height: 50)
-                    .background(.black)
-                    .cornerRadius(12)
+                    .background(Color.themeTextPrimary)
+                    .cornerRadius(14)
                 }
 
                 if let error = authManager.error {

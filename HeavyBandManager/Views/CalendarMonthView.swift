@@ -138,17 +138,32 @@ struct CalendarMonthView: View {
                 }
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button {
-                    withAnimation { showUpcoming.toggle() }
-                } label: {
-                    Image(systemName: showUpcoming ? "calendar" : "list.bullet")
-                }
+                HStack(spacing: 0) {
+                    Button {
+                        withAnimation { showUpcoming.toggle() }
+                    } label: {
+                        Image(systemName: showUpcoming ? "calendar" : "line.3.horizontal")
+                            .font(.system(size: 14, weight: .medium))
+                            .frame(width: 36, height: 32)
+                    }
 
-                Button {
-                    withAnimation { scrollProxy?.scrollTo(0, anchor: .top) }
-                } label: {
-                    Text("Today")
+                    Divider()
+                        .frame(height: 20)
+
+                    Button {
+                        withAnimation { scrollProxy?.scrollTo(0, anchor: .top) }
+                    } label: {
+                        Text("Today")
+                            .font(.system(size: 14, weight: .semibold))
+                            .padding(.horizontal, 12)
+                            .frame(height: 32)
+                    }
                 }
+                .background(
+                    Capsule()
+                        .strokeBorder(Color.themeBorder, lineWidth: 1)
+                )
+                .clipShape(Capsule())
             }
         }
         .navigationBarTitleDisplayMode(.inline)
