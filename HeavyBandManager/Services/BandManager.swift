@@ -502,6 +502,18 @@ final class BandManager: ObservableObject {
         } catch { print("Update band name error: \(error)") }
     }
 
+    func updatePracticeLocation(_ location: String) async {
+        guard let band = currentBand, isLeader else { return }
+        do {
+            try await Config.supabase
+                .from("bands")
+                .update(["default_practice_location": AnyJSON.string(location)])
+                .eq("id", value: band.id.uuidString)
+                .execute()
+            await loadBands()
+        } catch { print("Update practice location error: \(error)") }
+    }
+
     func uploadBandLogo(imageData: Data) async {
         guard let band = currentBand, isLeader else { return }
         let path = "bands/\(band.id.uuidString)/logo.jpg"
