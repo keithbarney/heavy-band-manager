@@ -80,25 +80,20 @@ struct OnboardingView: View {
                     }
                 }
 
-                Button {
-                    step = .join
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: "plus")
-                            .foregroundStyle(.blue)
-                            .font(.title2)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Join a Band")
-                                .foregroundStyle(.primary)
-                            Text("Enter an invite code from your bandmate")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                HStack {
+                    Text("Enter your invite code")
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                    Spacer(minLength: 16)
+                    TextField("XXX-XXXX", text: $inviteCode)
+                        .multilineTextAlignment(.trailing)
+                        .foregroundStyle(.secondary)
+                        .textInputAutocapitalization(.characters)
+                        .onSubmit {
+                            guard !inviteCode.isEmpty else { return }
+                            Task { await joinBand() }
                         }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                    }
                 }
             }
         }
