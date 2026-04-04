@@ -12,13 +12,13 @@ stack: swiftui
 
 | Figma Screen | Node ID | Code File | Notes |
 |-------------|---------|-----------|-------|
-| Login | 6:2 | Views/LoginView.swift | Apple Sign-In + dev user picker |
-| Onboarding - Welcome | 7:2 | Views/OnboardingView.swift | Welcome step (create/join) |
-| Onboarding - Create Band | 8:2 | Views/OnboardingView.swift | Create band form step |
-| Calendar - Month View | 10:2 | Views/CalendarMonthView.swift | 6-month scrollable grid with overlap dots |
-| Day Detail Sheet | 12:2 | Views/DayDetailSheet.swift | Member availability, overlap windows, schedule |
-| Settings | 13:2 | Views/SettingsView.swift | Profile, band, calendar, appearance |
-| Member Edit | 19:2 | Views/SettingsView.swift (MemberEditView) | Profile edit with avatar, name, instrument |
+| LoginView | 26:2 | Views/LoginView.swift | Apple Sign-In |
+| OnboardingView - Welcome | 26:3 | Views/OnboardingView.swift | Welcome step (create/join) |
+| OnboardingView - Create | 26:4 | Views/OnboardingView.swift | Create band form step |
+| CalendarMonthView | 26:5 | Views/CalendarMonthView.swift | 6-month scrollable grid with overlap dots |
+| DayDetailSheet | 26:6 | Views/DayDetailSheet.swift | Member availability, overlap windows, schedule |
+| SettingsView | 26:7 | Views/SettingsView.swift | Profile, band, calendar, appearance |
+| MemberEditView | 26:8 | Views/SettingsView.swift (MemberEditView) | Profile edit with avatar, name, instrument |
 
 ## Component Mapping
 

@@ -5,28 +5,25 @@ struct LoginView: View {
     @EnvironmentObject var authManager: AuthManager
 
     var body: some View {
-        VStack(spacing: 32) {
+        VStack(spacing: 0) {
             Spacer()
 
-            // Branding
-            VStack(spacing: 12) {
-                Text("🎸")
-                    .font(.system(size: 64))
+            // Content group — branding + button centered together
+            VStack(spacing: 32) {
+                VStack(spacing: 12) {
+                    Text("🎸")
+                        .font(.system(size: 64))
 
-                Text("Band Practice")
-                    .font(.system(size: 34, weight: .bold))
-                    .foregroundStyle(Color.themeTextPrimary)
+                    Text("Band Practice")
+                        .font(.system(size: 34, weight: .bold))
+                        .foregroundStyle(Color.themeTextPrimary)
 
-                Text("Find the perfect practice time\nfor everyone.")
-                    .font(.system(size: 17))
-                    .foregroundStyle(Color.themeTextSecondary)
-                    .multilineTextAlignment(.center)
-            }
+                    Text("Find the perfect practice time\nfor everyone.")
+                        .font(.system(size: 17))
+                        .foregroundStyle(Color.themeTextSecondary)
+                        .multilineTextAlignment(.center)
+                }
 
-            Spacer()
-
-            // Sign In
-            VStack(spacing: 16) {
                 Button(action: {
                     authManager.signInWithApple()
                 }) {
@@ -42,18 +39,18 @@ struct LoginView: View {
                     .background(Color.themeTextPrimary)
                     .cornerRadius(14)
                 }
-
-                if let error = authManager.error {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(Color.themeDanger)
-                        .multilineTextAlignment(.center)
-                }
+                .padding(.horizontal, 40)
             }
-            .padding(.horizontal, 40)
+
+            if let error = authManager.error {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(Color.themeDanger)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 16)
+            }
 
             Spacer()
-                .frame(height: 40)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.themeBg)
