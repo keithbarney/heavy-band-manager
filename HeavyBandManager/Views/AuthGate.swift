@@ -1,7 +1,7 @@
 import SwiftUI
 
 // TEMP: Set to true to bypass login for screenshots
-let SCREENSHOT_MODE = true
+let SCREENSHOT_MODE = false
 
 struct AuthGate: View {
     @EnvironmentObject var authManager: AuthManager

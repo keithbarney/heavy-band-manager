@@ -8,12 +8,9 @@ struct LoginView: View {
         VStack(spacing: 0) {
             Spacer()
 
-            // Content group — branding + button centered together
+            // Content group — branding + button
             VStack(spacing: 32) {
                 VStack(spacing: 12) {
-                    Text("🎸")
-                        .font(.system(size: 64))
-
                     Text("Band Practice")
                         .font(.system(size: 34, weight: .bold))
                         .foregroundStyle(Color.themeTextPrimary)
