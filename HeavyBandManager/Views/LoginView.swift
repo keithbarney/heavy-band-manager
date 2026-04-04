@@ -52,11 +52,6 @@ struct LoginView: View {
             }
             .padding(.horizontal, 40)
 
-            #if DEBUG
-            DevUserPicker()
-                .padding(.top, 8)
-            #endif
-
             Spacer()
                 .frame(height: 40)
         }
