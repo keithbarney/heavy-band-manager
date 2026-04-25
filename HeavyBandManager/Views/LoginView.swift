@@ -24,18 +24,12 @@ struct LoginView: View {
                 Button(action: {
                     authManager.signInWithApple()
                 }) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "apple.logo")
-                            .font(.system(size: 18, weight: .semibold))
-                        Text("Sign in with Apple")
-                            .font(.system(size: 17, weight: .semibold))
-                    }
-                    .foregroundStyle(Color.themeBg)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Color.themeTextPrimary)
-                    .cornerRadius(14)
+                    Label("Sign in with Apple", systemImage: "apple.logo")
+                        .font(.system(size: 17, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
                 }
+                .buttonStyle(.glassProminent)
                 .padding(.horizontal, 40)
             }
 

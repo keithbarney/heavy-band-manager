@@ -4,13 +4,14 @@ struct OnboardingView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var bandManager: BandManager
 
-    enum Step { case welcome, createBand, createProfile }
-    @State private var step: Step = .welcome
+    enum Step: Hashable { case createBand, createProfile }
+    @State private var path: [Step] = []
 
     // Band fields
     @State private var bandName = ""
     @State private var practiceLocation = ""
     @State private var showLogoPicker = false
+    @State private var showLocationSearch = false
     @State private var logoImage: UIImage?
 
     // Profile fields
@@ -28,24 +29,24 @@ struct OnboardingView: View {
     @State private var didPrefill = false
 
     var body: some View {
-        NavigationStack {
-            Group {
-                switch step {
-                case .welcome: welcomeView
-                case .createBand: createBandView
-                case .createProfile: createProfileView
-                }
-            }
-            .onAppear {
-                if !didPrefill {
-                    if let appleName = authManager.appleFullName, !appleName.isEmpty {
-                        userName = appleName
+        NavigationStack(path: $path) {
+            welcomeView
+                .navigationDestination(for: Step.self) { step in
+                    switch step {
+                    case .createBand: createBandView
+                    case .createProfile: createProfileView
                     }
-                    if userName.isEmpty, let email = authManager.user?.email {
-                        userName = email.components(separatedBy: "@").first ?? ""
-                    }
-                    didPrefill = true
                 }
+        }
+        .onAppear {
+            if !didPrefill {
+                if let appleName = authManager.appleFullName, !appleName.isEmpty {
+                    userName = appleName
+                }
+                if userName.isEmpty, let email = authManager.user?.email {
+                    userName = email.components(separatedBy: "@").first ?? ""
+                }
+                didPrefill = true
             }
         }
     }
@@ -71,7 +72,7 @@ struct OnboardingView: View {
 
             Section {
                 Button {
-                    step = .createBand
+                    path.append(.createBand)
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "plus")
@@ -157,7 +158,20 @@ struct OnboardingView: View {
                     }
                 }
 
-                TextField("Practice Location", text: $practiceLocation)
+                Button {
+                    showLocationSearch = true
+                } label: {
+                    HStack {
+                        Text("Practice Location")
+                            .foregroundStyle(practiceLocation.isEmpty ? Color.blue : Color.primary)
+                        Spacer()
+                        Text(practiceLocation.isEmpty ? "Orbit Studios" : practiceLocation)
+                            .foregroundStyle(practiceLocation.isEmpty ? .tertiary : .secondary)
+                    }
+                }
+                .sheet(isPresented: $showLocationSearch) {
+                    LocationSearchView(selectedLocation: $practiceLocation)
+                }
             }
 
             if let error = errorMessage {
@@ -168,34 +182,24 @@ struct OnboardingView: View {
                 }
             }
 
-            Section {
-                Button {
-                    guard !bandName.isEmpty else { return }
-                    withAnimation { step = .createProfile }
-                } label: {
-                    Text("Continue")
-                        .frame(maxWidth: .infinity)
-                        .bold()
-                        .foregroundStyle(.white)
-                        .padding(.vertical, 12)
-                        .background(bandName.isEmpty ? Color.blue.opacity(0.4) : Color.blue)
-                        .cornerRadius(12)
-                }
-                .disabled(bandName.isEmpty)
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-            }
         }
         .navigationTitle("Create a band")
         .navigationBarTitleDisplayMode(.large)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button {
-                    step = .welcome
-                } label: {
-                    Image(systemName: "chevron.left")
-                }
+        .safeAreaInset(edge: .bottom) {
+            Button {
+                guard !bandName.isEmpty else { return }
+                path.append(.createProfile)
+            } label: {
+                Text("Continue")
+                    .bold()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
             }
+            .buttonStyle(.glassProminent)
+            .tint(.blue)
+            .disabled(bandName.isEmpty)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
         }
     }
 
@@ -259,44 +263,27 @@ struct OnboardingView: View {
                 }
             }
 
-            Section {
-                Button {
-                    Task { await finishOnboarding() }
-                } label: {
-                    if isSubmitting {
-                        HStack {
-                            Spacer()
-                            ProgressView().tint(.white)
-                            Spacer()
-                        }
-                        .padding(.vertical, 12)
-                        .background(Color.blue)
-                        .cornerRadius(12)
-                    } else {
-                        Text("Get Started")
-                            .frame(maxWidth: .infinity)
-                            .bold()
-                            .foregroundStyle(.white)
-                            .padding(.vertical, 12)
-                            .background(userName.isEmpty ? Color.blue.opacity(0.4) : Color.blue)
-                            .cornerRadius(12)
-                    }
-                }
-                .disabled(userName.isEmpty || isSubmitting)
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-            }
         }
         .navigationTitle("Create your profile")
         .navigationBarTitleDisplayMode(.large)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button {
-                    step = .createBand
-                } label: {
-                    Image(systemName: "chevron.left")
+        .safeAreaInset(edge: .bottom) {
+            Button {
+                Task { await finishOnboarding() }
+            } label: {
+                if isSubmitting {
+                    ProgressView()
+                } else {
+                    Text("Get Started")
+                        .bold()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
                 }
             }
+            .buttonStyle(.glassProminent)
+            .tint(.blue)
+            .disabled(userName.isEmpty || isSubmitting)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
         }
     }
 
@@ -308,8 +295,8 @@ struct OnboardingView: View {
         errorMessage = nil
         do {
             try await bandManager.joinBand(inviteCode: inviteCode, userName: userName, instrument: nil)
-            // After joining, go to profile step to fill in details
-            withAnimation { step = .createProfile }
+            // After joining, go directly to profile step
+            path.append(.createProfile)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -331,7 +318,7 @@ struct OnboardingView: View {
 
                 // Upload logo if picked
                 if let logoImage {
-                    let resized = resizedImage(logoImage, maxDimension: 512)
+                    let resized = logoImage.resized(maxDimension: 512)
                     if let jpegData = resized.jpegData(compressionQuality: 0.7) {
                         await bandManager.uploadBandLogo(imageData: jpegData)
                     }
@@ -351,7 +338,7 @@ struct OnboardingView: View {
 
             // Upload avatar photo if picked
             if let photoImage {
-                let resized = resizedImage(photoImage, maxDimension: 512)
+                let resized = photoImage.resized(maxDimension: 512)
                 if let jpegData = resized.jpegData(compressionQuality: 0.7) {
                     await bandManager.uploadAvatar(imageData: jpegData)
                 }
@@ -362,14 +349,4 @@ struct OnboardingView: View {
         isSubmitting = false
     }
 
-    // MARK: - Helpers
-
-    private func resizedImage(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
-        let size = image.size
-        guard max(size.width, size.height) > maxDimension else { return image }
-        let scale = maxDimension / max(size.width, size.height)
-        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: newSize)
-        return renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: newSize)) }
-    }
 }

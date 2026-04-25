@@ -6,12 +6,14 @@ struct SettingsView: View {
     @EnvironmentObject var bandManager: BandManager
     @EnvironmentObject var calendarManager: CalendarManager
     @EnvironmentObject var toastManager: ToastManager
-    @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .light
+    @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @State private var isSyncing = false
     @State private var editingBandName = false
     @State private var bandNameText = ""
     @State private var showLogoPicker = false
     @State private var isUploadingLogo = false
+    @State private var showLeaveConfirmation = false
+    @State private var showDeleteConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -168,12 +170,8 @@ struct SettingsView: View {
                         }
 
                         LabeledContent("Calendar Name") {
-                            TextField("Band Practice", text: $calendarManager.practiceCalendarName)
-                                .multilineTextAlignment(.trailing)
+                            Text("\(bandManager.currentBand?.name ?? "Band") Practice")
                                 .foregroundStyle(.secondary)
-                                .onChange(of: calendarManager.practiceCalendarName) { _, _ in
-                                    calendarManager.savePrefs()
-                                }
                         }
 
                         Toggle("Auto-sync on open", isOn: $calendarManager.autoSync)
@@ -219,6 +217,46 @@ struct SettingsView: View {
 
                 // MARK: - Account
                 Section {
+                    if !bandManager.isLeader {
+                        Button(role: .destructive) {
+                            showLeaveConfirmation = true
+                        } label: {
+                            Text("Leave Band")
+                        }
+                        .confirmationDialog(
+                            "Leave \(bandManager.currentBand?.name ?? "this band")?",
+                            isPresented: $showLeaveConfirmation,
+                            titleVisibility: .visible
+                        ) {
+                            Button("Leave Band", role: .destructive) {
+                                Task { await bandManager.leaveBand() }
+                            }
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("You'll lose access to this band's calendar and scheduled practices. You can rejoin later with an invite code.")
+                        }
+                    }
+
+                    if bandManager.isLeader {
+                        Button(role: .destructive) {
+                            showDeleteConfirmation = true
+                        } label: {
+                            Text("Delete Band")
+                        }
+                        .confirmationDialog(
+                            "Delete \(bandManager.currentBand?.name ?? "this band")?",
+                            isPresented: $showDeleteConfirmation,
+                            titleVisibility: .visible
+                        ) {
+                            Button("Delete Forever", role: .destructive) {
+                                Task { await bandManager.deleteBand() }
+                            }
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("This permanently deletes the band, all members, availability data, and scheduled practices for everyone. This cannot be undone.")
+                        }
+                    }
+
                     Button(role: .destructive) {
                         Task {
                             bandManager.cleanup()
@@ -275,21 +313,10 @@ struct SettingsView: View {
 
     // MARK: - Helpers
 
-    private static func resizedImage(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
-        let size = image.size
-        guard max(size.width, size.height) > maxDimension else { return image }
-        let scale = maxDimension / max(size.width, size.height)
-        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: newSize)
-        return renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: newSize))
-        }
-    }
-
     private func handleLogoImage(_ image: UIImage) async {
         isUploadingLogo = true
         defer { isUploadingLogo = false }
-        let resized = Self.resizedImage(image, maxDimension: 512)
+        let resized = image.resized(maxDimension: 512)
         guard let jpegData = resized.jpegData(compressionQuality: 0.7) else { return }
         await bandManager.uploadBandLogo(imageData: jpegData)
     }
@@ -466,17 +493,8 @@ struct MemberEditView: View {
     private func handlePhotoImage(_ image: UIImage) async {
         isUploadingPhoto = true
         defer { isUploadingPhoto = false }
-        let resized = resizedImage(image, maxDimension: 512)
+        let resized = image.resized(maxDimension: 512)
         guard let jpegData = resized.jpegData(compressionQuality: 0.7) else { return }
         await bandManager.uploadAvatar(imageData: jpegData)
-    }
-
-    private func resizedImage(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
-        let size = image.size
-        guard max(size.width, size.height) > maxDimension else { return image }
-        let scale = maxDimension / max(size.width, size.height)
-        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: newSize)
-        return renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: newSize)) }
     }
 }

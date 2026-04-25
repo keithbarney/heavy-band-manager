@@ -8,6 +8,7 @@ struct CalendarMonthView: View {
     @State private var showUpcoming = false
     @State private var isSyncing = false
     @State private var hasLoadedInitial = false
+    @State private var showBandPicker = false
 
     private let calendar = Calendar.current
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
@@ -104,66 +105,68 @@ struct CalendarMonthView: View {
             await loadVisibleRange()
             refreshCache()
         }
+        .onChange(of: bandManager.currentBand?.id) { _, _ in
+            Task {
+                await loadVisibleRange()
+                refreshCache()
+            }
+        }
         .onChange(of: bandManager.slots.count) { _, _ in
             refreshCache()
         }
         .onChange(of: bandManager.practices.count) { _, _ in
             refreshCache()
         }
+        .sheet(isPresented: $showBandPicker) {
+            BandPickerSheet()
+                .environmentObject(bandManager)
+        }
         .toolbar {
             ToolbarItem(placement: .principal) {
-                HStack(spacing: 8) {
-                    if let logoUrl = bandManager.currentBand?.logoUrl, let url = URL(string: logoUrl) {
-                        AsyncImage(url: url) { image in
-                            image.resizable().scaledToFill()
-                        } placeholder: {
+                Button {
+                    showBandPicker = true
+                } label: {
+                    HStack(spacing: 8) {
+                        if let logoUrl = bandManager.currentBand?.logoUrl, let url = URL(string: logoUrl) {
+                            AsyncImage(url: url) { image in
+                                image.resizable().scaledToFill()
+                            } placeholder: {
+                                Circle()
+                                    .fill(Color.themeAccent.opacity(0.2))
+                                    .frame(width: 36, height: 36)
+                            }
+                            .frame(width: 36, height: 36)
+                            .clipShape(Circle())
+                        } else {
                             Circle()
                                 .fill(Color.themeAccent.opacity(0.2))
                                 .frame(width: 36, height: 36)
+                                .overlay(
+                                    Text(String((bandManager.currentBand?.name ?? "B").prefix(1)).uppercased())
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundStyle(Color.themeAccent)
+                                )
                         }
-                        .frame(width: 36, height: 36)
-                        .clipShape(Circle())
-                    } else {
-                        Circle()
-                            .fill(Color.themeAccent.opacity(0.2))
-                            .frame(width: 36, height: 36)
-                            .overlay(
-                                Text(String((bandManager.currentBand?.name ?? "B").prefix(1)).uppercased())
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundStyle(Color.themeAccent)
-                            )
+                        Text(bandManager.currentBand?.name ?? "")
+                            .font(.headline)
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
                     }
-                    Text(bandManager.currentBand?.name ?? "")
-                        .font(.headline)
                 }
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
-                HStack(spacing: 0) {
-                    Button {
-                        withAnimation { showUpcoming.toggle() }
-                    } label: {
-                        Image(systemName: showUpcoming ? "calendar" : "line.3.horizontal")
-                            .font(.system(size: 14, weight: .medium))
-                            .frame(width: 36, height: 32)
-                    }
-
-                    Divider()
-                        .frame(height: 20)
-
-                    Button {
-                        withAnimation { scrollProxy?.scrollTo(0, anchor: .top) }
-                    } label: {
-                        Text("Today")
-                            .font(.system(size: 14, weight: .semibold))
-                            .padding(.horizontal, 12)
-                            .frame(height: 32)
-                    }
+                Button {
+                    withAnimation { showUpcoming.toggle() }
+                } label: {
+                    Image(systemName: showUpcoming ? "calendar" : "line.3.horizontal")
                 }
-                .background(
-                    Capsule()
-                        .strokeBorder(Color.themeBorder, lineWidth: 1)
-                )
-                .clipShape(Capsule())
+
+                Button {
+                    withAnimation { scrollProxy?.scrollTo(0, anchor: .top) }
+                } label: {
+                    Text("Today")
+                }
             }
         }
         .navigationBarTitleDisplayMode(.inline)

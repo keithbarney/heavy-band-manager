@@ -183,13 +183,15 @@ final class CalendarManager: ObservableObject {
 
     // MARK: - Write Practice Events
 
-    func getOrCreateBandCalendar() throws -> EKCalendar {
-        if let existing = store.calendars(for: .event).first(where: { $0.title == practiceCalendarName }) {
+    func getOrCreateBandCalendar(bandName: String? = nil) throws -> EKCalendar {
+        let calendarName = bandName.map { "\($0) Practice" } ?? practiceCalendarName
+
+        if let existing = store.calendars(for: .event).first(where: { $0.title == calendarName }) {
             return existing
         }
 
         let calendar = EKCalendar(for: .event, eventStore: store)
-        calendar.title = practiceCalendarName
+        calendar.title = calendarName
         calendar.cgColor = UIColor.systemBlue.cgColor
 
         if let icloud = store.sources.first(where: { $0.sourceType == .calDAV && $0.title == "iCloud" }) {
@@ -214,7 +216,7 @@ final class CalendarManager: ObservableObject {
             throw CalendarError.accessDenied
         }
 
-        let calendar = try getOrCreateBandCalendar()
+        let calendar = try getOrCreateBandCalendar(bandName: bandName)
 
         let event = EKEvent(eventStore: store)
         event.title = "\(bandName) Practice"
@@ -251,46 +253,6 @@ final class CalendarManager: ObservableObject {
         try store.remove(event, span: .thisEvent)
     }
 
-    /// Legacy wrapper for existing code that passes a ScheduledPractice directly.
-    func createPracticeEvent(practice: ScheduledPractice, bandName: String) -> String? {
-        guard let practiceDate = TimeHelpers.date(from: practice.date) else { return nil }
-        do {
-            let calendar = try getOrCreateBandCalendar()
-
-            let event = EKEvent(eventStore: store)
-            event.title = "\(bandName) Practice"
-            event.calendar = calendar
-            event.location = practice.location
-
-            let cal = Calendar.current
-            var startComps = cal.dateComponents([.year, .month, .day], from: practiceDate)
-            startComps.hour = practice.startMinutes / 60
-            startComps.minute = practice.startMinutes % 60
-            event.startDate = cal.date(from: startComps)!
-
-            var endComps = startComps
-            endComps.hour = practice.endMinutes / 60
-            endComps.minute = practice.endMinutes % 60
-            event.endDate = cal.date(from: endComps)!
-
-            event.addAlarm(EKAlarm(relativeOffset: -30 * 60))
-
-            try store.save(event, span: .thisEvent)
-            return event.eventIdentifier
-        } catch {
-            print("Failed to save practice event: \(error)")
-            return nil
-        }
-    }
-
-    func removePracticeEvent(eventId: String) {
-        guard let event = store.event(withIdentifier: eventId) else { return }
-        do {
-            try store.remove(event, span: .thisEvent)
-        } catch {
-            print("Failed to remove event: \(error)")
-        }
-    }
 
     // MARK: - Persistence
 

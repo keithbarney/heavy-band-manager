@@ -13,6 +13,7 @@ final class BandManager: ObservableObject {
 
     private var slotsChannel: RealtimeChannelV2?
     private var practicesChannel: RealtimeChannelV2?
+    private var membersChannel: RealtimeChannelV2?
 
     // MARK: - Current member helper
 
@@ -33,62 +34,23 @@ final class BandManager: ObservableObject {
         return user.id
     }
 
+    // MARK: - Last selected band persistence
+    @AppStorage("lastBandId") private var lastBandId: String = ""
+
     // MARK: - Load
 
+    /// Full load: fetches band list, selects a band, loads its data, subscribes to realtime.
+    /// Used on app launch and auth state changes.
     func loadBands() async {
         isLoading = true
         defer { isLoading = false }
         error = nil
 
         do {
-            let userId = try currentUserId()
+            try await refreshBandList()
 
-            // Step 1: Find which bands the user belongs to via band_members
-            let myMemberships: [BandMember] = try await Config.supabase
-                .from("band_members")
-                .select()
-                .eq("user_id", value: userId.uuidString)
-                .execute()
-                .value
-
-            guard let membership = myMemberships.first else {
-                bands = []
-                currentBand = nil
-                return
-            }
-
-            // Step 2: Fetch that band
-            let fetchedBands: [Band] = try await Config.supabase
-                .from("bands")
-                .select()
-                .eq("id", value: membership.bandId.uuidString)
-                .execute()
-                .value
-
-            if let first = fetchedBands.first {
-                // Step 3: Fetch all members of this band
-                let fetchedMembers: [BandMember] = try await Config.supabase
-                    .from("band_members")
-                    .select()
-                    .eq("band_id", value: first.id.uuidString)
-                    .order("joined_at")
-                    .execute()
-                    .value
-
-                let bandWithMembers = BandWithMembers(
-                    id: first.id,
-                    name: first.name,
-                    creatorId: first.creatorId,
-                    leaderId: first.leaderId,
-                    defaultPracticeLocation: first.defaultPracticeLocation,
-                    inviteCode: first.inviteCode,
-                    logoUrl: first.logoUrl,
-                    createdAt: first.createdAt,
-                    bandMembers: fetchedMembers
-                )
-
-                bands = [bandWithMembers]
-                currentBand = bandWithMembers
+            if let band = currentBand {
+                lastBandId = band.id.uuidString
                 async let slotsLoad: Void = loadSlots()
                 async let practicesLoad: Void = loadPractices()
                 _ = await (slotsLoad, practicesLoad)
@@ -97,6 +59,116 @@ final class BandManager: ObservableObject {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    /// Lightweight refresh: fetches bands + members only, no slots/practices/subscriptions.
+    /// Used after create/join/delete to update the band list without redundant work.
+    private func refreshBandList() async throws {
+        let userId = try currentUserId()
+
+        let myMemberships: [BandMember] = try await Config.supabase
+            .from("band_members")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .execute()
+            .value
+
+        guard !myMemberships.isEmpty else {
+            bands = []
+            currentBand = nil
+            return
+        }
+
+        // Batch fetch all bands + all members in 2 queries (not N+1)
+        let bandIds = myMemberships.map { $0.bandId.uuidString }
+
+        let fetchedBands: [Band] = try await Config.supabase
+            .from("bands")
+            .select()
+            .in("id", values: bandIds)
+            .execute()
+            .value
+
+        let fetchedMembers: [BandMember] = try await Config.supabase
+            .from("band_members")
+            .select()
+            .in("band_id", values: bandIds)
+            .order("joined_at")
+            .execute()
+            .value
+
+        let membersByBand = Dictionary(grouping: fetchedMembers, by: \.bandId)
+
+        let allBands = fetchedBands.map { band in
+            BandWithMembers(
+                id: band.id,
+                name: band.name,
+                creatorId: band.creatorId,
+                leaderId: band.leaderId,
+                defaultPracticeLocation: band.defaultPracticeLocation,
+                inviteCode: band.inviteCode,
+                logoUrl: band.logoUrl,
+                createdAt: band.createdAt,
+                bandMembers: membersByBand[band.id] ?? []
+            )
+        }
+
+        bands = allBands
+
+        // Restore last selected band, or pick the first one
+        if let lastId = UUID(uuidString: lastBandId),
+           let restored = allBands.first(where: { $0.id == lastId }) {
+            currentBand = restored
+        } else {
+            currentBand = allBands.first
+        }
+    }
+
+    /// Refreshes just the current band's member list (for single-field updates).
+    private func reloadCurrentBandMembers() async {
+        guard let bandId = currentBand?.id else { return }
+        do {
+            let fetchedMembers: [BandMember] = try await Config.supabase
+                .from("band_members")
+                .select()
+                .eq("band_id", value: bandId.uuidString)
+                .order("joined_at")
+                .execute()
+                .value
+
+            if var updated = currentBand {
+                updated = BandWithMembers(
+                    id: updated.id, name: updated.name, creatorId: updated.creatorId,
+                    leaderId: updated.leaderId, defaultPracticeLocation: updated.defaultPracticeLocation,
+                    inviteCode: updated.inviteCode, logoUrl: updated.logoUrl,
+                    createdAt: updated.createdAt, bandMembers: fetchedMembers
+                )
+                currentBand = updated
+                if let idx = bands.firstIndex(where: { $0.id == bandId }) {
+                    bands[idx] = updated
+                }
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    // MARK: - Switch Band
+
+    func selectBand(_ band: BandWithMembers) async {
+        guard band.id != currentBand?.id else { return }
+
+        unsubscribeAllChannels()
+        slots = []
+        practices = []
+
+        currentBand = band
+        lastBandId = band.id.uuidString
+
+        async let slotsLoad: Void = loadSlots()
+        async let practicesLoad: Void = loadPractices()
+        _ = await (slotsLoad, practicesLoad)
+        subscribeToChanges()
     }
 
     func loadSlots(from startDate: String? = nil, to endDate: String? = nil) async {
@@ -146,7 +218,8 @@ final class BandManager: ObservableObject {
     // MARK: - Create Band
 
     func createBand(name: String, userName: String, instrument: String?) async throws {
-        // Use SECURITY DEFINER function to bypass RLS for atomic band + member creation
+        let previousBandIds = Set(bands.map(\.id))
+
         let params: [String: AnyJSON] = [
             "p_band_name": .string(name),
             "p_member_name": .string(userName),
@@ -158,7 +231,12 @@ final class BandManager: ObservableObject {
             .rpc("create_band_with_member", params: params)
             .execute()
 
-        await loadBands()
+        try await refreshBandList()
+
+        if let newBand = bands.first(where: { !previousBandIds.contains($0.id) }) {
+            await selectBand(newBand)
+            onBandCreated?(newBand.name)
+        }
     }
 
     // MARK: - Join Band
@@ -187,7 +265,11 @@ final class BandManager: ObservableObject {
             .value
 
         if existingMembers.contains(where: { $0.userId == userId }) {
-            throw NSError(domain: "BandManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "You're already in this band"])
+            try await refreshBandList()
+            if let joined = bands.first(where: { $0.id == band.id }) {
+                await selectBand(joined)
+            }
+            return
         }
 
         let colorIndex = existingMembers.count % MemberColors.palette.count
@@ -207,7 +289,11 @@ final class BandManager: ObservableObject {
             .execute()
             .value
 
-        await loadBands()
+        try await refreshBandList()
+
+        if let joined = bands.first(where: { $0.id == band.id }) {
+            await selectBand(joined)
+        }
     }
 
     // MARK: - Schedule Practice
@@ -383,16 +469,30 @@ final class BandManager: ObservableObject {
 
     // MARK: - Realtime
 
+    var onMemberJoined: ((String) -> Void)?
+    var onBandCreated: ((String) -> Void)?
+    var onBandDeleted: ((String) -> Void)?
+
+    private func unsubscribeAllChannels() {
+        if let ch = slotsChannel { Task { await ch.unsubscribe() } }
+        if let ch = practicesChannel { Task { await ch.unsubscribe() } }
+        if let ch = membersChannel { Task { await ch.unsubscribe() } }
+        slotsChannel = nil
+        practicesChannel = nil
+        membersChannel = nil
+    }
+
     private func subscribeToChanges() {
         guard let bandId = currentBand?.id else { return }
 
-        if let old = slotsChannel { Task { await old.unsubscribe() } }
-        if let old = practicesChannel { Task { await old.unsubscribe() } }
+        unsubscribeAllChannels()
 
         let newSlots = Config.supabase.realtimeV2.channel("slots-\(bandId.uuidString)")
         let newPractices = Config.supabase.realtimeV2.channel("practices-\(bandId.uuidString)")
+        let newMembers = Config.supabase.realtimeV2.channel("members-\(bandId.uuidString)")
         slotsChannel = newSlots
         practicesChannel = newPractices
+        membersChannel = newMembers
 
         Task {
             let changes = newSlots.postgresChange(AnyAction.self, table: "availability_slots")
@@ -409,13 +509,66 @@ final class BandManager: ObservableObject {
                 await loadPractices()
             }
         }
+
+        Task {
+            let changes = newMembers.postgresChange(
+                AnyAction.self,
+                table: "band_members",
+                filter: "band_id=eq.\(bandId.uuidString)"
+            )
+            await newMembers.subscribe()
+            for await _ in changes {
+                let countBefore = members.count
+                let myId = try? currentUserId()
+                // Lightweight reload — no subscriptions, no slots/practices
+                await reloadCurrentBandMembers()
+
+                // Band was deleted — currentBand is now nil or different
+                guard currentBand?.id == bandId else { return }
+
+                if members.count > countBefore,
+                   let newest = members.last,
+                   newest.userId != myId {
+                    onMemberJoined?(newest.name)
+                }
+            }
+        }
+    }
+
+    func leaveBand() async {
+        guard let member = currentMember else { return }
+        do {
+            let userId = try currentUserId()
+            try await Config.supabase
+                .from("band_members")
+                .delete()
+                .eq("id", value: member.id.uuidString)
+                .eq("user_id", value: userId.uuidString)
+                .execute()
+            cleanup()
+            await loadBands()
+        } catch {
+            self.error = "Leave band error: \(error.localizedDescription)"
+        }
+    }
+
+    func deleteBand() async {
+        guard let band = currentBand, isLeader else { return }
+        let bandName = band.name
+        do {
+            try await Config.supabase
+                .rpc("delete_band", params: ["p_band_id": AnyJSON.string(band.id.uuidString)])
+                .execute()
+            cleanup()
+            await loadBands()
+            onBandDeleted?(bandName)
+        } catch {
+            self.error = "Delete band error: \(error.localizedDescription)"
+        }
     }
 
     func cleanup() {
-        if let ch = slotsChannel { Task { await ch.unsubscribe() } }
-        if let ch = practicesChannel { Task { await ch.unsubscribe() } }
-        slotsChannel = nil
-        practicesChannel = nil
+        unsubscribeAllChannels()
         bands = []
         currentBand = nil
         slots = []
@@ -446,7 +599,7 @@ final class BandManager: ObservableObject {
                 .eq("id", value: member.id.uuidString)
                 .execute()
 
-            await loadBands()
+            await reloadCurrentBandMembers()
         } catch {
             self.error = error.localizedDescription
             print("Avatar upload error: \(error)")
@@ -462,7 +615,7 @@ final class BandManager: ObservableObject {
             .update(["practice_window_start": AnyJSON.integer(start), "practice_window_end": AnyJSON.integer(end)])
             .eq("id", value: member.id.uuidString)
             .execute()
-        await loadBands()
+        await reloadCurrentBandMembers()
     }
 
     func updateMemberName(_ name: String) async {
@@ -473,7 +626,7 @@ final class BandManager: ObservableObject {
                 .update(["name": AnyJSON.string(name)])
                 .eq("id", value: member.id.uuidString)
                 .execute()
-            await loadBands()
+            await reloadCurrentBandMembers()
         } catch { print("Update name error: \(error)") }
     }
 
@@ -486,7 +639,7 @@ final class BandManager: ObservableObject {
                 .update(["instrument": AnyJSON.string(instrument)])
                 .eq("id", value: id.uuidString)
                 .execute()
-            await loadBands()
+            await reloadCurrentBandMembers()
         } catch { print("Update instrument error: \(error)") }
     }
 
@@ -498,7 +651,7 @@ final class BandManager: ObservableObject {
                 .update(["name": AnyJSON.string(name)])
                 .eq("id", value: band.id.uuidString)
                 .execute()
-            await loadBands()
+            try? await refreshBandList()
         } catch { print("Update band name error: \(error)") }
     }
 
@@ -510,7 +663,7 @@ final class BandManager: ObservableObject {
                 .update(["default_practice_location": AnyJSON.string(location)])
                 .eq("id", value: band.id.uuidString)
                 .execute()
-            await loadBands()
+            try? await refreshBandList()
         } catch { print("Update practice location error: \(error)") }
     }
 
@@ -529,7 +682,7 @@ final class BandManager: ObservableObject {
                 .update(["logo_url": AnyJSON.string(publicURL.absoluteString)])
                 .eq("id", value: band.id.uuidString)
                 .execute()
-            await loadBands()
+            try? await refreshBandList()
         } catch { print("Upload band logo error: \(error)") }
     }
 
