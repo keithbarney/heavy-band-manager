@@ -18,14 +18,29 @@ Status as of 2026-04-25:
 - Sign-in not required for review (Apple Sign-In with any Apple ID works)
 - App Review Notes filled
 
-## 🟡 In progress
-- Archive build at v1.0.0 (1) — running in background
-- Build upload to App Store Connect — pending archive completion
+## 🟡 Built, needs upload
+- Archive at v1.0.0 (1): `build/HeavyBandManager.xcarchive`
+- IPA exported: `build/Export/HeavyBandManager.ipa` (3.3 MB)
 
 ## ⛔ Blocked, needs you (Keith)
 
+### Build upload
+The ASC API key `T57P89S53M` (issuer `69a6de7d-...`) returns zero apps — wrong team or insufficient role — so `altool` can't upload.
+
+**Easiest fix — Transporter (App Store-only flow, free Mac App Store download):**
+1. Open Transporter, sign in with your Apple ID
+2. Drag `build/Export/HeavyBandManager.ipa` in
+3. Click **Deliver**
+
+**Or via Xcode:**
+1. Xcode → Window → Organizer
+2. Select the v1.0.0 archive (today)
+3. Click **Distribute App** → **App Store Connect** → **Upload**
+
+Either path takes ~3 minutes. The build will then appear in TestFlight after Apple's processing (~15 min) and be selectable on the Distribution page.
+
 ### Screenshots upload
-Chrome MCP can't drag files to ASC. You'll need to drag these three PNGs into the Distribution → Previews and Screenshots area:
+Chrome MCP can't drag files to ASC (file_upload returns "Not allowed" on appstoreconnect.apple.com). Drag these three PNGs into Distribution → Previews and Screenshots:
 ```
 marketing/screenshots/01-calendar.png
 marketing/screenshots/02-day-detail.png
