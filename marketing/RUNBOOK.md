@@ -2,6 +2,16 @@
 
 Status as of 2026-04-25:
 
+**🎉 SUBMITTED FOR REVIEW — 2026-04-25 18:49 UTC. State: WAITING_FOR_REVIEW.**
+
+Submission ID: `506992f5-dee3-40c9-8f01-4fb7c286c992`
+Build: 1.0 (4) — `95b89369-7ac2-436b-a3eb-2853a85bbdb0`
+ASC API key used: `3HY789364Y` (from sports-calendar-sync `.env.appstore`)
+
+Apple typically reviews within 24–48 hours. Watch for email at keithbarneydesign@gmail.com.
+
+
+
 ## ✅ Done
 - App Store Connect record created (Apple ID `6763776073`)
 - Bundle ID: `com.keithbarney.heavybandmanager`
