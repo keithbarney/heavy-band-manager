@@ -1,5 +1,7 @@
 import SwiftUI
 import UIKit
+import EventKit
+import UserNotifications
 
 struct SettingsView: View {
     @EnvironmentObject var authManager: AuthManager
@@ -7,6 +9,7 @@ struct SettingsView: View {
     @EnvironmentObject var calendarManager: CalendarManager
     @EnvironmentObject var toastManager: ToastManager
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
+    @Environment(\.scenePhase) private var scenePhase
     @State private var isSyncing = false
     @State private var editingBandName = false
     @State private var bandNameText = ""
@@ -14,6 +17,7 @@ struct SettingsView: View {
     @State private var isUploadingLogo = false
     @State private var showLeaveConfirmation = false
     @State private var showDeleteConfirmation = false
+    @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
 
     var body: some View {
         NavigationStack {
@@ -137,21 +141,8 @@ struct SettingsView: View {
                 }
 
                 // MARK: - Calendar
-                Section {
-                    if !calendarManager.isAuthorized {
-                        Button {
-                            Task { await calendarManager.requestAccess() }
-                        } label: {
-                            Label("Connect Calendar", systemImage: "calendar.badge.plus")
-                        }
-                    } else {
-                        LabeledContent("Status") {
-                            HStack(spacing: 4) {
-                                Circle().fill(.green).frame(width: 8, height: 8)
-                                Text("Connected").foregroundStyle(.green)
-                            }
-                        }
-
+                if calendarManager.isAuthorized {
+                    Section {
                         NavigationLink {
                             calendarSourcesList
                         } label: {
@@ -183,36 +174,55 @@ struct SettingsView: View {
                             Task { await syncCalendar() }
                         } label: {
                             HStack {
+                                Label("Resync Calendar", systemImage: "arrow.triangle.2.circlepath")
                                 if isSyncing {
+                                    Spacer()
                                     ProgressView()
-                                } else {
-                                    Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
-                                }
-                                Spacer()
-                                if let lastSync = calendarManager.lastSyncDate {
-                                    Text(formatLastSync(lastSync))
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
                                 }
                             }
                         }
                         .disabled(isSyncing)
+                    } header: {
+                        Text("Calendar")
                     }
-                } header: {
-                    Text("Calendar")
                 }
 
                 // MARK: - Appearance
-                Section {
-                    Picker("Appearance", selection: $appearanceMode) {
-                        ForEach(AppearanceMode.allCases, id: \.self) { mode in
-                            Text(mode.rawValue).tag(mode)
+                Section("Appearance") {
+                    ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                appearanceMode = mode
+                            }
+                        } label: {
+                            HStack {
+                                Label(mode.rawValue, systemImage: mode.sfSymbol)
+                                    .foregroundStyle(Color.themeTextPrimary)
+                                Spacer()
+                                if appearanceMode == mode {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(Color.themeAccent)
+                                        .fontWeight(.semibold)
+                                }
+                            }
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                } header: {
-                    Text("Appearance")
+                }
+
+                // MARK: - Permissions
+                Section("Permissions") {
+                    PermissionRow(
+                        title: "Calendar",
+                        sfSymbol: "calendar",
+                        state: calendarPermissionState,
+                        action: handleCalendarTap
+                    )
+                    PermissionRow(
+                        title: "Notifications",
+                        sfSymbol: "bell",
+                        state: notificationPermissionState,
+                        action: handleNotificationTap
+                    )
                 }
 
                 // MARK: - Account
@@ -267,13 +277,15 @@ struct SettingsView: View {
                     }
                 }
 
-                // Version
+                // MARK: - About
                 Section {
-                    Text("Band Practice v0.1.0")
-                        .font(.footnote)
-                        .foregroundStyle(.tertiary)
-                        .frame(maxWidth: .infinity)
-                        .listRowBackground(Color.clear)
+                    HStack {
+                        Text("Version")
+                            .foregroundStyle(Color.themeTextPrimary)
+                        Spacer()
+                        Text("\(Bundle.main.marketingVersion) (\(Bundle.main.buildNumber))")
+                            .foregroundStyle(Color.themeTextSecondary)
+                    }
                 }
             }
             .listStyle(.insetGrouped)
@@ -285,7 +297,63 @@ struct SettingsView: View {
                     Task { await bandManager.updateBandName(bandNameText) }
                 }
             }
+            .task { await refreshNotificationStatus() }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    calendarManager.checkAuthorization()
+                    Task { await refreshNotificationStatus() }
+                }
+            }
         }
+    }
+
+    // MARK: - Permission state
+
+    private var calendarPermissionState: PermissionState {
+        switch EKEventStore.authorizationStatus(for: .event) {
+        case .fullAccess, .authorized: return .granted
+        case .notDetermined: return .notDetermined
+        default: return .denied
+        }
+    }
+
+    private var notificationPermissionState: PermissionState {
+        switch notificationStatus {
+        case .authorized, .provisional, .ephemeral: return .granted
+        case .notDetermined: return .notDetermined
+        default: return .denied
+        }
+    }
+
+    private func handleCalendarTap() {
+        switch calendarPermissionState {
+        case .granted, .denied:
+            openSettings()
+        case .notDetermined:
+            Task { await calendarManager.requestAccess() }
+        }
+    }
+
+    private func handleNotificationTap() {
+        switch notificationPermissionState {
+        case .granted, .denied:
+            openSettings()
+        case .notDetermined:
+            Task {
+                _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+                await refreshNotificationStatus()
+            }
+        }
+    }
+
+    private func refreshNotificationStatus() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        await MainActor.run { notificationStatus = settings.authorizationStatus }
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     // MARK: - Member Band Row
@@ -395,6 +463,32 @@ struct SettingsView: View {
     }
 }
 
+// MARK: - Permission Row
+
+enum PermissionState {
+    case granted, notDetermined, denied
+}
+
+private struct PermissionRow: View {
+    let title: String
+    let sfSymbol: String
+    let state: PermissionState
+    let action: () -> Void
+
+    private var binding: Binding<Bool> {
+        Binding(
+            get: { state == .granted },
+            set: { _ in action() }
+        )
+    }
+
+    var body: some View {
+        Toggle(isOn: binding) {
+            Label(title, systemImage: sfSymbol)
+        }
+    }
+}
+
 // MARK: - Member Edit View
 
 struct MemberEditView: View {
@@ -496,5 +590,14 @@ struct MemberEditView: View {
         let resized = image.resized(maxDimension: 512)
         guard let jpegData = resized.jpegData(compressionQuality: 0.7) else { return }
         await bandManager.uploadAvatar(imageData: jpegData)
+    }
+}
+
+extension Bundle {
+    var marketingVersion: String {
+        infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+    }
+    var buildNumber: String {
+        infoDictionary?["CFBundleVersion"] as? String ?? "?"
     }
 }

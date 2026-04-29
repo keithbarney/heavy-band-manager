@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 struct CalendarMonthView: View {
     @EnvironmentObject var bandManager: BandManager
@@ -10,7 +9,6 @@ struct CalendarMonthView: View {
     @State private var isSyncing = false
     @State private var hasLoadedInitial = false
     @State private var showBandPicker = false
-    @State private var showCalendarConnectSheet = false
 
     private let calendar = Calendar.current
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
@@ -123,29 +121,6 @@ struct CalendarMonthView: View {
             BandPickerSheet()
                 .environmentObject(bandManager)
         }
-        .alert("Connect Your Calendar", isPresented: $showCalendarConnectSheet) {
-            Button(calendarManager.authStatus == .notDetermined ? "Connect" : "Open Settings") {
-                Task {
-                    if calendarManager.authStatus == .notDetermined {
-                        await calendarManager.requestAccess()
-                    } else if let url = URL(string: UIApplication.openSettingsURLString) {
-                        await UIApplication.shared.open(url)
-                    }
-                }
-            }
-            Button("Not Now", role: .cancel) {}
-        } message: {
-            Text("Band Practice needs your calendar to find times when everyone is free and add scheduled practices.")
-        }
-        .onAppear {
-            calendarManager.checkAuthorization()
-            if !calendarManager.isAuthorized {
-                showCalendarConnectSheet = true
-            }
-        }
-        .onChange(of: calendarManager.isAuthorized) { _, authorized in
-            if authorized { showCalendarConnectSheet = false }
-        }
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Button {
@@ -180,17 +155,20 @@ struct CalendarMonthView: View {
                     }
                 }
             }
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                Button {
-                    withAnimation { showUpcoming.toggle() }
-                } label: {
-                    Image(systemName: showUpcoming ? "calendar" : "line.3.horizontal")
-                }
+            ToolbarItem(placement: .topBarTrailing) {
+                HStack(spacing: 4) {
+                    Button {
+                        withAnimation { showUpcoming.toggle() }
+                    } label: {
+                        Image(systemName: showUpcoming ? "calendar" : "line.3.horizontal")
+                            .padding(.leading, 8)
+                    }
 
-                Button {
-                    withAnimation { scrollProxy?.scrollTo(0, anchor: .top) }
-                } label: {
-                    Text("Today")
+                    Button {
+                        withAnimation { scrollProxy?.scrollTo(0, anchor: .top) }
+                    } label: {
+                        Text("Today")
+                    }
                 }
             }
         }

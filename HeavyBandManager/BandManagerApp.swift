@@ -27,7 +27,6 @@ struct BandManagerApp: App {
                 .task {
                     await authManager.initialize()
                     calendarManager.initialize()
-                    await requestNotificationPermission()
                     bandManager.onMemberJoined = { name in
                         toastManager.show("\(name) joined the band")
                         sendLocalNotification(

@@ -12,4 +12,12 @@ enum AppearanceMode: String, CaseIterable {
         case .dark: return .dark
         }
     }
+
+    var sfSymbol: String {
+        switch self {
+        case .system: return "circle.lefthalf.filled"
+        case .light: return "sun.max"
+        case .dark: return "moon"
+        }
+    }
 }

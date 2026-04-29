@@ -32,10 +32,16 @@ targets:
     settings:
       base:
         INFOPLIST_FILE: HeavyBandManager/Info.plist
-        PRODUCT_BUNDLE_IDENTIFIER: com.keithbarney.heavybandmanager
         TARGETED_DEVICE_FAMILY: "1"
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: "NO"
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: "NO"
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.keithbarney.heavybandmanager.local
+          BUNDLE_DISPLAY_NAME: Band Practice (L)
+        Release:
+          PRODUCT_BUNDLE_IDENTIFIER: com.keithbarney.heavybandmanager
+          BUNDLE_DISPLAY_NAME: Band Practice
     dependencies:
       - package: Supabase
       - package: DialKit
