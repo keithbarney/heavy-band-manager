@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct CalendarMonthView: View {
     @EnvironmentObject var bandManager: BandManager
@@ -9,6 +10,7 @@ struct CalendarMonthView: View {
     @State private var isSyncing = false
     @State private var hasLoadedInitial = false
     @State private var showBandPicker = false
+    @State private var showCalendarConnectSheet = false
 
     private let calendar = Calendar.current
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
@@ -120,6 +122,29 @@ struct CalendarMonthView: View {
         .sheet(isPresented: $showBandPicker) {
             BandPickerSheet()
                 .environmentObject(bandManager)
+        }
+        .alert("Connect Your Calendar", isPresented: $showCalendarConnectSheet) {
+            Button(calendarManager.authStatus == .notDetermined ? "Connect" : "Open Settings") {
+                Task {
+                    if calendarManager.authStatus == .notDetermined {
+                        await calendarManager.requestAccess()
+                    } else if let url = URL(string: UIApplication.openSettingsURLString) {
+                        await UIApplication.shared.open(url)
+                    }
+                }
+            }
+            Button("Not Now", role: .cancel) {}
+        } message: {
+            Text("Band Practice needs your calendar to find times when everyone is free and add scheduled practices.")
+        }
+        .onAppear {
+            calendarManager.checkAuthorization()
+            if !calendarManager.isAuthorized {
+                showCalendarConnectSheet = true
+            }
+        }
+        .onChange(of: calendarManager.isAuthorized) { _, authorized in
+            if authorized { showCalendarConnectSheet = false }
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -240,7 +265,8 @@ struct CalendarMonthView: View {
         let dayNum = calendar.component(.day, from: date)
 
         let textColor: Color = {
-            if isToday || hasPractice { return .white }
+            if isToday { return .themeBg }
+            if hasPractice { return .white }
             if isPast { return .themeTextTertiary }
             return .themeTextPrimary
         }()

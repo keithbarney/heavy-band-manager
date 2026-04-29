@@ -5,6 +5,7 @@ import EventKit
 @MainActor
 final class CalendarManager: ObservableObject {
     @Published var isAuthorized = false
+    @Published var authStatus: EKAuthorizationStatus = .notDetermined
     @Published var deviceCalendars: [DeviceCalendar] = []
     @Published var selectedCalendarIds: Set<String> = []
     @Published var lastSyncDate: Date?
@@ -32,6 +33,7 @@ final class CalendarManager: ObservableObject {
 
     func checkAuthorization() {
         let status = EKEventStore.authorizationStatus(for: .event)
+        authStatus = status
         isAuthorized = status == .fullAccess || status == .authorized
         if isAuthorized {
             loadDeviceCalendars()
@@ -42,11 +44,13 @@ final class CalendarManager: ObservableObject {
         do {
             let granted = try await store.requestFullAccessToEvents()
             isAuthorized = granted
+            authStatus = EKEventStore.authorizationStatus(for: .event)
             if granted {
                 loadDeviceCalendars()
             }
         } catch {
             print("Calendar access error: \(error)")
+            authStatus = EKEventStore.authorizationStatus(for: .event)
         }
     }
 
