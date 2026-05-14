@@ -86,7 +86,7 @@ enum BackgroundSyncManager {
         // Convert to CalendarEvent structs
         var calendarEvents: [CalendarEvent] = []
         for event in ekEvents {
-            guard !event.isAllDay, event.status != .canceled else { continue }
+            guard event.status != .canceled else { continue }
             var dayStart = calendar.startOfDay(for: event.startDate)
             let eventEnd = event.endDate!
             while dayStart < eventEnd {

@@ -109,6 +109,9 @@ final class BandManager: ObservableObject {
                 inviteCode: band.inviteCode,
                 logoUrl: band.logoUrl,
                 createdAt: band.createdAt,
+                minPracticeMinutes: band.minPracticeMinutes,
+                maxPracticeMinutes: band.maxPracticeMinutes,
+                minMembersRequired: band.minMembersRequired,
                 bandMembers: membersByBand[band.id] ?? []
             )
         }
@@ -141,7 +144,11 @@ final class BandManager: ObservableObject {
                     id: updated.id, name: updated.name, creatorId: updated.creatorId,
                     leaderId: updated.leaderId, defaultPracticeLocation: updated.defaultPracticeLocation,
                     inviteCode: updated.inviteCode, logoUrl: updated.logoUrl,
-                    createdAt: updated.createdAt, bandMembers: fetchedMembers
+                    createdAt: updated.createdAt,
+                    minPracticeMinutes: updated.minPracticeMinutes,
+                    maxPracticeMinutes: updated.maxPracticeMinutes,
+                    minMembersRequired: updated.minMembersRequired,
+                    bandMembers: fetchedMembers
                 )
                 currentBand = updated
                 if let idx = bands.firstIndex(where: { $0.id == bandId }) {
@@ -464,7 +471,10 @@ final class BandManager: ObservableObject {
     }
 
     func overlapMap() -> [String: OverlapQuality] {
-        OverlapEngine.overlapMap(slots: slots, totalMembers: members.count)
+        let minDur = currentBand?.minPracticeMinutes ?? 0
+        let maxDur = currentBand?.maxPracticeMinutes ?? 1440
+        let threshold = min(max(currentBand?.minMembersRequired ?? 2, 1), max(members.count, 1))
+        return OverlapEngine.overlapMap(slots: slots, totalMembers: members.count, minMembers: threshold, minDuration: minDur, maxDuration: maxDur)
     }
 
     // MARK: - Realtime
@@ -667,6 +677,33 @@ final class BandManager: ObservableObject {
         } catch { print("Update practice location error: \(error)") }
     }
 
+    func updateMinMembersRequired(_ count: Int) async {
+        guard let band = currentBand, isLeader, count >= 1 else { return }
+        do {
+            try await Config.supabase
+                .from("bands")
+                .update(["min_members_required": AnyJSON.integer(count)])
+                .eq("id", value: band.id.uuidString)
+                .execute()
+            try? await refreshBandList()
+        } catch { print("Update min members error: \(error)") }
+    }
+
+    func updatePracticeDuration(min: Int, max: Int) async {
+        guard let band = currentBand, isLeader, max >= min else { return }
+        do {
+            try await Config.supabase
+                .from("bands")
+                .update([
+                    "min_practice_minutes": AnyJSON.integer(min),
+                    "max_practice_minutes": AnyJSON.integer(max)
+                ])
+                .eq("id", value: band.id.uuidString)
+                .execute()
+            try? await refreshBandList()
+        } catch { print("Update practice duration error: \(error)") }
+    }
+
     func uploadBandLogo(imageData: Data) async {
         guard let band = currentBand, isLeader else { return }
         let path = "bands/\(band.id.uuidString)/logo.jpg"
@@ -699,7 +736,7 @@ final class BandManager: ObservableObject {
         let matt = BandMember(id: UUID(), bandId: bandId, userId: mattId, name: "Matt Horwitz", instrument: "Drums", color: "#30D158", practiceWindowStart: 600, practiceWindowEnd: 1200, avatarUrl: nil, joinedAt: now)
         let dan = BandMember(id: UUID(), bandId: bandId, userId: danId, name: "Dan Smith", instrument: "Bass", color: "#0A84FF", practiceWindowStart: 480, practiceWindowEnd: 1320, avatarUrl: nil, joinedAt: now)
 
-        let band = BandWithMembers(id: bandId, name: "Eighteen Visions", creatorId: jamesId, leaderId: jamesId, defaultPracticeLocation: "The Rehearsal Room", inviteCode: "18V2025", logoUrl: nil, createdAt: now, bandMembers: [james, matt, dan])
+        let band = BandWithMembers(id: bandId, name: "Eighteen Visions", creatorId: jamesId, leaderId: jamesId, defaultPracticeLocation: "The Rehearsal Room", inviteCode: "18V2025", logoUrl: nil, createdAt: now, minPracticeMinutes: 60, maxPracticeMinutes: 240, minMembersRequired: 2, bandMembers: [james, matt, dan])
 
         let cal = Calendar.current
         // Helper to generate date strings for offsets from today
@@ -781,6 +818,9 @@ extension Color {
         let uiColor = UIColor(self)
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         uiColor.getRed(&r, green: &g, blue: &b, alpha: &a)
-        return String(format: "#%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255))
+        let ri = Int((r * 255).rounded())
+        let gi = Int((g * 255).rounded())
+        let bi = Int((b * 255).rounded())
+        return String(format: "#%02X%02X%02X", ri, gi, bi)
     }
 }

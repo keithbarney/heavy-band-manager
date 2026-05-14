@@ -160,6 +160,30 @@ struct SettingsView: View {
                             }
                         }
 
+                        if bandManager.isLeader {
+                            NavigationLink {
+                                practiceDurationPicker
+                            } label: {
+                                LabeledContent("Practice Duration") {
+                                    if let band = bandManager.currentBand {
+                                        Text("\(TimeHelpers.formatDuration(band.minPracticeMinutes)) – \(TimeHelpers.formatDuration(band.maxPracticeMinutes))")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+
+                            NavigationLink {
+                                minMembersPicker
+                            } label: {
+                                LabeledContent("Minimum Members") {
+                                    if let band = bandManager.currentBand {
+                                        Text("\(band.minMembersRequired) of \(bandManager.members.count)")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+
                         LabeledContent("Calendar Name") {
                             Text("\(bandManager.currentBand?.name ?? "Band") Practice")
                                 .foregroundStyle(.secondary)
@@ -459,6 +483,67 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Practice Window")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    // MARK: - Practice Duration Picker
+    private var practiceDurationPicker: some View {
+        let durations = Array(stride(from: 30, through: 480, by: 30))
+        return Form {
+            Section {
+                Picker("Minimum", selection: Binding(
+                    get: { bandManager.currentBand?.minPracticeMinutes ?? 60 },
+                    set: { newMin in
+                        let curMax = bandManager.currentBand?.maxPracticeMinutes ?? 240
+                        let newMax = curMax < newMin ? newMin : curMax
+                        Task { await bandManager.updatePracticeDuration(min: newMin, max: newMax) }
+                    }
+                )) {
+                    ForEach(durations, id: \.self) { d in
+                        Text(TimeHelpers.formatDuration(d)).tag(d)
+                    }
+                }
+
+                Picker("Maximum", selection: Binding(
+                    get: { bandManager.currentBand?.maxPracticeMinutes ?? 240 },
+                    set: { newMax in
+                        let curMin = bandManager.currentBand?.minPracticeMinutes ?? 60
+                        let newMin = curMin > newMax ? newMax : curMin
+                        Task { await bandManager.updatePracticeDuration(min: newMin, max: newMax) }
+                    }
+                )) {
+                    ForEach(durations, id: \.self) { d in
+                        Text(TimeHelpers.formatDuration(d)).tag(d)
+                    }
+                }
+            } footer: {
+                Text("Best Windows only suggests practice slots within this duration range.")
+            }
+        }
+        .navigationTitle("Practice Duration")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    // MARK: - Minimum Members Picker
+    private var minMembersPicker: some View {
+        let total = max(bandManager.members.count, 1)
+        return Form {
+            Section {
+                Picker("Minimum Members", selection: Binding(
+                    get: { min(max(bandManager.currentBand?.minMembersRequired ?? 2, 1), total) },
+                    set: { newVal in Task { await bandManager.updateMinMembersRequired(newVal) } }
+                )) {
+                    ForEach(1...total, id: \.self) { n in
+                        Text(n == total ? "\(n) (all)" : "\(n)").tag(n)
+                    }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            } footer: {
+                Text("Days with at least this many members available show a yellow dot. Days where everyone is available show green.")
+            }
+        }
+        .navigationTitle("Minimum Members")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

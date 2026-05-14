@@ -72,12 +72,12 @@ enum TimeHelpers {
 
 enum MemberColors {
     static let palette: [Color] = [
-        Color(hex: "06C167"),
+        Color(hex: "0A84FF"),
         Color(hex: "01B8CA"),
         Color(hex: "FC823A"),
         Color(hex: "F83446"),
         Color(hex: "A855F7"),
-        Color(hex: "EAB308"),
+        Color(hex: "FF2D92"),
     ]
 
     static func color(at index: Int) -> Color {

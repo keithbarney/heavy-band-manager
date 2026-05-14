@@ -98,7 +98,6 @@ final class CalendarManager: ObservableObject {
         var calendarEvents: [CalendarEvent] = []
 
         for event in events {
-            guard !event.isAllDay else { continue }
             if event.status == .canceled { continue }
 
             // Handle multi-day events by clipping to each day

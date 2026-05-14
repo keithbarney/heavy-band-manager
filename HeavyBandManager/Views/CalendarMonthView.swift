@@ -117,6 +117,15 @@ struct CalendarMonthView: View {
         .onChange(of: bandManager.practices.count) { _, _ in
             refreshCache()
         }
+        .onChange(of: bandManager.currentBand?.minPracticeMinutes) { _, _ in
+            refreshCache()
+        }
+        .onChange(of: bandManager.currentBand?.maxPracticeMinutes) { _, _ in
+            refreshCache()
+        }
+        .onChange(of: bandManager.currentBand?.minMembersRequired) { _, _ in
+            refreshCache()
+        }
         .sheet(isPresented: $showBandPicker) {
             BandPickerSheet()
                 .environmentObject(bandManager)

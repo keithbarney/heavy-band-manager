@@ -9,6 +9,9 @@ struct Band: Identifiable, Codable {
     let inviteCode: String
     let logoUrl: String?
     let createdAt: Date
+    let minPracticeMinutes: Int
+    let maxPracticeMinutes: Int
+    let minMembersRequired: Int
 
     enum CodingKeys: String, CodingKey {
         case id, name
@@ -18,6 +21,9 @@ struct Band: Identifiable, Codable {
         case inviteCode = "invite_code"
         case logoUrl = "logo_url"
         case createdAt = "created_at"
+        case minPracticeMinutes = "min_practice_minutes"
+        case maxPracticeMinutes = "max_practice_minutes"
+        case minMembersRequired = "min_members_required"
     }
 }
 
@@ -109,6 +115,9 @@ struct BandWithMembers: Identifiable, Codable {
     let inviteCode: String
     let logoUrl: String?
     let createdAt: Date
+    let minPracticeMinutes: Int
+    let maxPracticeMinutes: Int
+    let minMembersRequired: Int
     let bandMembers: [BandMember]
 
     enum CodingKeys: String, CodingKey {
@@ -119,6 +128,9 @@ struct BandWithMembers: Identifiable, Codable {
         case inviteCode = "invite_code"
         case logoUrl = "logo_url"
         case createdAt = "created_at"
+        case minPracticeMinutes = "min_practice_minutes"
+        case maxPracticeMinutes = "max_practice_minutes"
+        case minMembersRequired = "min_members_required"
         case bandMembers = "band_members"
     }
 }

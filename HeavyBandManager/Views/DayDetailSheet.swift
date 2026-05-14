@@ -22,10 +22,16 @@ struct DayDetailSheet: View {
     }
 
     private var dayWindows: [OverlapWindow] {
-        OverlapEngine.compute(
+        let total = bandManager.members.count
+        let threshold = min(max(bandManager.currentBand?.minMembersRequired ?? 2, 1), max(total, 1))
+        let minDur = bandManager.currentBand?.minPracticeMinutes ?? 60
+        let maxDur = bandManager.currentBand?.maxPracticeMinutes ?? 240
+        return OverlapEngine.enumerateOptions(
             slots: daySlots,
-            totalMembers: bandManager.members.count,
-            minMembers: 2
+            totalMembers: total,
+            minMembers: threshold,
+            minDuration: minDur,
+            maxDuration: maxDur
         )
     }
 
@@ -193,44 +199,49 @@ struct DayDetailSheet: View {
 
     private func windowRow(_ window: OverlapWindow) -> some View {
         let freeMembers = bandManager.members.filter { window.freeMembers.contains($0.id) }
+        let isFullAttendance = window.freeMembers.count >= window.totalMembers
+        let accent: Color = isFullAttendance ? .themeSuccess : .themeWarning
 
-        return VStack(alignment: .leading, spacing: 12) {
-            Text("\(TimeHelpers.formatTime(window.startMinutes)) – \(TimeHelpers.formatTime(window.endMinutes))")
-                .font(.headline)
+        return Button {
+            guard bandManager.isLeader else { return }
+            selectedWindow = window
+            showScheduleAlert = true
+        } label: {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(accent)
+                    .frame(width: 4, height: 36)
 
-            // Only show available members
-            HStack(spacing: -6) {
-                ForEach(freeMembers) { member in
-                    Circle()
-                        .fill(Color(hex: member.color))
-                        .frame(width: 26, height: 26)
-                        .overlay(
-                            Text(String(member.name.prefix(1)).uppercased())
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(.white)
-                        )
-                        .overlay(
-                            Circle()
-                                .strokeBorder(Color(.systemBackground), lineWidth: 2)
-                        )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(TimeHelpers.formatTime(window.startMinutes)) – \(TimeHelpers.formatTime(window.endMinutes))")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text("\(TimeHelpers.formatDuration(window.duration)) · \(window.freeMembers.count) of \(window.totalMembers)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-            }
 
-            if bandManager.isLeader {
-                Button {
-                    selectedWindow = window
-                    showScheduleAlert = true
-                } label: {
-                    Text("Schedule This")
-                        .font(.body.bold())
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
-                        .background(Color.green)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                Spacer()
+
+                HStack(spacing: -6) {
+                    ForEach(freeMembers) { member in
+                        Circle()
+                            .fill(Color(hex: member.color))
+                            .frame(width: 22, height: 22)
+                            .overlay(
+                                Text(String(member.name.prefix(1)).uppercased())
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(.white)
+                            )
+                            .overlay(
+                                Circle()
+                                    .strokeBorder(Color(.systemBackground), lineWidth: 1.5)
+                            )
+                    }
                 }
             }
         }
-        .padding(.vertical, 4)
+        .buttonStyle(.plain)
+        .disabled(!bandManager.isLeader)
     }
 }
