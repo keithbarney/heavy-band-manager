@@ -131,7 +131,7 @@ struct CalendarMonthView: View {
                 .environmentObject(bandManager)
         }
         .toolbar {
-            ToolbarItem(placement: .principal) {
+            ToolbarItem(placement: .topBarLeading) {
                 Button {
                     showBandPicker = true
                 } label: {

@@ -29,27 +29,25 @@ struct BandTabs: View {
                 Task { await checkPermissions() }
             }
         }
-        .onChange(of: showCalendarPrompt) { _, isShown in
-            if !isShown {
-                Task { await checkPermissions() }
-            }
-        }
         .alert("Connect Your Calendar", isPresented: $showCalendarPrompt) {
-            Button(calendarManager.authStatus == .notDetermined ? "Connect" : "Open Settings") {
+            Button(calendarManager.authStatus == .notDetermined ? "Continue" : "Open Settings") {
                 Task {
                     if calendarManager.authStatus == .notDetermined {
                         await calendarManager.requestAccess()
+                        await checkPermissions()
                     } else if let url = URL(string: UIApplication.openSettingsURLString) {
                         await UIApplication.shared.open(url)
                     }
                 }
             }
-            Button("Not Now", role: .cancel) {}
+            if calendarManager.authStatus != .notDetermined {
+                Button("Cancel", role: .cancel) {}
+            }
         } message: {
             Text("Band Practice needs your calendar to find times when everyone is free. Without it, the app can't work.")
         }
         .alert("Enable Notifications", isPresented: $showNotifPrompt) {
-            Button(notifAuthStatus == .notDetermined ? "Enable" : "Open Settings") {
+            Button(notifAuthStatus == .notDetermined ? "Continue" : "Open Settings") {
                 Task {
                     if notifAuthStatus == .notDetermined {
                         _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
@@ -59,7 +57,9 @@ struct BandTabs: View {
                     }
                 }
             }
-            Button("Not Now", role: .cancel) {}
+            if notifAuthStatus != .notDetermined {
+                Button("Cancel", role: .cancel) {}
+            }
         } message: {
             Text("Get notified when bandmates join and when practices are scheduled. Optional.")
         }

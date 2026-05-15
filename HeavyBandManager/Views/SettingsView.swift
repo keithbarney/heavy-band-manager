@@ -17,6 +17,10 @@ struct SettingsView: View {
     @State private var isUploadingLogo = false
     @State private var showLeaveConfirmation = false
     @State private var showDeleteConfirmation = false
+    @State private var showDeleteAccountConfirmation = false
+    @State private var showDeleteAccountFinalAlert = false
+    @State private var isDeletingAccount = false
+    @State private var deleteAccountError: String?
     @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
 
     var body: some View {
@@ -144,6 +148,25 @@ struct SettingsView: View {
                 if calendarManager.isAuthorized {
                     Section {
                         NavigationLink {
+                            EditCalendarView()
+                                .environmentObject(calendarManager)
+                        } label: {
+                            HStack {
+                                Text("Calendar")
+                                Spacer()
+                                Circle()
+                                    .fill(calendarManager.practiceCalendarColor)
+                                    .frame(width: 14, height: 14)
+                                    .overlay(
+                                        Circle().stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
+                                    )
+                                Text(calendarManager.practiceCalendarName)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+
+                        NavigationLink {
                             calendarSourcesList
                         } label: {
                             LabeledContent("Sources", value: "\(calendarManager.selectedCalendarIds.count) selected")
@@ -182,11 +205,6 @@ struct SettingsView: View {
                                     }
                                 }
                             }
-                        }
-
-                        LabeledContent("Calendar Name") {
-                            Text("\(bandManager.currentBand?.name ?? "Band") Practice")
-                                .foregroundStyle(.secondary)
                         }
 
                         Toggle("Auto-sync on open", isOn: $calendarManager.autoSync)
@@ -298,6 +316,47 @@ struct SettingsView: View {
                         }
                     } label: {
                         Text("Sign Out")
+                    }
+
+                    Button(role: .destructive) {
+                        showDeleteAccountConfirmation = true
+                    } label: {
+                        HStack {
+                            Text("Delete Account")
+                            if isDeletingAccount {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(isDeletingAccount)
+                    .confirmationDialog(
+                        "Delete your account?",
+                        isPresented: $showDeleteAccountConfirmation,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Continue", role: .destructive) {
+                            showDeleteAccountFinalAlert = true
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("This permanently deletes your account, your bands, members, availability, and scheduled practices. This cannot be undone.")
+                    }
+                    .alert("Permanently delete your account?", isPresented: $showDeleteAccountFinalAlert) {
+                        Button("Delete Forever", role: .destructive) {
+                            Task { await performDeleteAccount() }
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("There is no way to recover this account or its data once deleted.")
+                    }
+                    .alert("Couldn't delete account", isPresented: Binding(
+                        get: { deleteAccountError != nil },
+                        set: { if !$0 { deleteAccountError = nil } }
+                    )) {
+                        Button("OK", role: .cancel) {}
+                    } message: {
+                        Text(deleteAccountError ?? "")
                     }
                 }
 
@@ -434,6 +493,16 @@ struct SettingsView: View {
         let end = Calendar.current.date(byAdding: .month, value: 2, to: start) ?? start
         await bandManager.syncCalendar(calendarManager: calendarManager, from: start, to: end)
         isSyncing = false
+    }
+
+    private func performDeleteAccount() async {
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+        bandManager.cleanup()
+        let success = await authManager.deleteAccount()
+        if !success {
+            deleteAccountError = authManager.error ?? "Please try again."
+        }
     }
 
     // MARK: - Calendar Sources List

@@ -189,7 +189,9 @@ enum BackgroundSyncManager {
             selectedCalendarIds: prefs.selectedCalendarIds,
             lastSyncDate: Date(),
             calendarName: prefs.calendarName,
-            autoSync: prefs.autoSync
+            autoSync: prefs.autoSync,
+            calendarColorHex: prefs.calendarColorHex,
+            calendarIdentifier: prefs.calendarIdentifier
         )
         if let encoded = try? JSONEncoder().encode(newPrefs) {
             UserDefaults.standard.set(encoded, forKey: prefsKey)

@@ -121,6 +121,30 @@ final class AuthManager: ObservableObject {
         }
     }
 
+    // MARK: - Delete Account
+
+    /// Calls the `delete-account` edge function to remove the user's data
+    /// and the auth.users row, then signs out locally. Returns true on success.
+    func deleteAccount() async -> Bool {
+        error = nil
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            try await Config.supabase.functions.invoke(
+                "delete-account",
+                options: FunctionInvokeOptions(method: .post)
+            )
+            try? await Config.supabase.auth.signOut()
+            session = nil
+            user = nil
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
+        }
+    }
+
     // MARK: - Sign Out
 
     func signOut() async {

@@ -10,8 +10,10 @@ final class CalendarManager: ObservableObject {
     @Published var selectedCalendarIds: Set<String> = []
     @Published var lastSyncDate: Date?
     @Published var practiceCalendarName = "Band Practice"
+    @Published var practiceCalendarColor: Color = .blue
     @Published var autoSync = true
 
+    private var practiceCalendarIdentifier: String?
     private let store = EKEventStore()
     private let prefsKey = "heavy-band-manager:calendar-prefs"
 
@@ -187,15 +189,27 @@ final class CalendarManager: ObservableObject {
     // MARK: - Write Practice Events
 
     func getOrCreateBandCalendar(bandName: String? = nil) throws -> EKCalendar {
-        let calendarName = bandName.map { "\($0) Practice" } ?? practiceCalendarName
+        // Look up by stored identifier first (survives renames)
+        if let id = practiceCalendarIdentifier,
+           let existing = store.calendar(withIdentifier: id) {
+            return existing
+        }
 
-        if let existing = store.calendars(for: .event).first(where: { $0.title == calendarName }) {
+        // First-run: default name to "<Band> Practice" if user hasn't picked one
+        if practiceCalendarName == "Band Practice", let bandName, !bandName.isEmpty {
+            practiceCalendarName = "\(bandName) Practice"
+        }
+
+        // Fall back to title match (legacy installs)
+        if let existing = store.calendars(for: .event).first(where: { $0.title == practiceCalendarName }) {
+            practiceCalendarIdentifier = existing.calendarIdentifier
+            savePrefs()
             return existing
         }
 
         let calendar = EKCalendar(for: .event, eventStore: store)
-        calendar.title = calendarName
-        calendar.cgColor = UIColor.systemBlue.cgColor
+        calendar.title = practiceCalendarName
+        calendar.cgColor = UIColor(practiceCalendarColor).cgColor
 
         if let icloud = store.sources.first(where: { $0.sourceType == .calDAV && $0.title == "iCloud" }) {
             calendar.source = icloud
@@ -206,7 +220,33 @@ final class CalendarManager: ObservableObject {
         }
 
         try store.saveCalendar(calendar, commit: true)
+        practiceCalendarIdentifier = calendar.calendarIdentifier
+        savePrefs()
         return calendar
+    }
+
+    /// Renames the synced practice calendar in EventKit and persists the new name.
+    func renameCalendar(to newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        practiceCalendarName = trimmed
+        if let id = practiceCalendarIdentifier,
+           let cal = store.calendar(withIdentifier: id) {
+            cal.title = trimmed
+            try? store.saveCalendar(cal, commit: true)
+        }
+        savePrefs()
+    }
+
+    /// Updates the synced practice calendar's color in EventKit and persists it.
+    func recolorCalendar(_ color: Color) {
+        practiceCalendarColor = color
+        if let id = practiceCalendarIdentifier,
+           let cal = store.calendar(withIdentifier: id) {
+            cal.cgColor = UIColor(color).cgColor
+            try? store.saveCalendar(cal, commit: true)
+        }
+        savePrefs()
     }
 
     /// Creates an Apple Calendar event for a scheduled practice.
@@ -266,6 +306,10 @@ final class CalendarManager: ObservableObject {
         lastSyncDate = prefs.lastSyncDate
         practiceCalendarName = prefs.calendarName ?? "Band Practice"
         autoSync = prefs.autoSync ?? true
+        practiceCalendarIdentifier = prefs.calendarIdentifier
+        if let hex = prefs.calendarColorHex, !hex.isEmpty {
+            practiceCalendarColor = Color(hex: hex)
+        }
     }
 
     func savePrefs() {
@@ -273,7 +317,9 @@ final class CalendarManager: ObservableObject {
             selectedCalendarIds: Array(selectedCalendarIds),
             lastSyncDate: lastSyncDate,
             calendarName: practiceCalendarName,
-            autoSync: autoSync
+            autoSync: autoSync,
+            calendarColorHex: UIColor(practiceCalendarColor).toHexString(),
+            calendarIdentifier: practiceCalendarIdentifier
         )
         if let data = try? JSONEncoder().encode(prefs) {
             UserDefaults.standard.set(data, forKey: prefsKey)
@@ -303,7 +349,23 @@ struct CalendarPrefs: Codable {
     let lastSyncDate: Date?
     let calendarName: String?
     let autoSync: Bool?
+    let calendarColorHex: String?
+    let calendarIdentifier: String?
 }
+
+// MARK: - Color Hex Codec
+
+extension UIColor {
+    func toHexString() -> String {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        getRed(&r, green: &g, blue: &b, alpha: &a)
+        return String(format: "#%02X%02X%02X",
+                      Int((r * 255).rounded()),
+                      Int((g * 255).rounded()),
+                      Int((b * 255).rounded()))
+    }
+}
+
 
 enum CalendarError: LocalizedError {
     case accessDenied
