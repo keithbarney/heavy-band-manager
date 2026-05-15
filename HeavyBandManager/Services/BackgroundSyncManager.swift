@@ -74,7 +74,7 @@ enum BackgroundSyncManager {
 
         let calendar = Calendar.current
         let start = calendar.startOfDay(for: Date())
-        let end = calendar.date(byAdding: .month, value: 2, to: start)!
+        let end = calendar.date(byAdding: .month, value: 6, to: start)!
 
         // Read device calendar events
         let ekCalendars = store.calendars(for: .event).filter { selectedIds.contains($0.calendarIdentifier) }

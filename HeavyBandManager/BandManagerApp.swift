@@ -40,6 +40,15 @@ struct BandManagerApp: App {
                     bandManager.onBandDeleted = { name in
                         toastManager.show("\(name) deleted")
                     }
+                    bandManager.onPracticeScheduled = { body in
+                        sendLocalNotification(title: "Practice Scheduled", body: body)
+                    }
+                    bandManager.onPracticeUpdated = { body in
+                        sendLocalNotification(title: "Practice Updated", body: body)
+                    }
+                    bandManager.onPracticeCancelled = { body in
+                        sendLocalNotification(title: "Practice Cancelled", body: body)
+                    }
                 }
                 .onChange(of: authManager.user) { _, newUser in
                     if newUser != nil {
@@ -100,7 +109,7 @@ struct BandManagerApp: App {
 
         let calendar = Calendar.current
         let start = calendar.startOfDay(for: Date())
-        let end = calendar.date(byAdding: .month, value: 2, to: start)!
+        let end = calendar.date(byAdding: .month, value: 6, to: start)!
         await bandManager.syncCalendar(calendarManager: calendarManager, from: start, to: end)
         BackgroundSyncManager.scheduleNext()
     }

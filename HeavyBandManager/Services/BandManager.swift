@@ -482,6 +482,9 @@ final class BandManager: ObservableObject {
     var onMemberJoined: ((String) -> Void)?
     var onBandCreated: ((String) -> Void)?
     var onBandDeleted: ((String) -> Void)?
+    var onPracticeScheduled: ((String) -> Void)?
+    var onPracticeUpdated: ((String) -> Void)?
+    var onPracticeCancelled: ((String) -> Void)?
 
     private func unsubscribeAllChannels() {
         if let ch = slotsChannel { Task { await ch.unsubscribe() } }
@@ -515,7 +518,36 @@ final class BandManager: ObservableObject {
         Task {
             let changes = newPractices.postgresChange(AnyAction.self, table: "scheduled_practices")
             await newPractices.subscribe()
-            for await _ in changes {
+            for await action in changes {
+                let myId = try? currentUserId()
+                switch action {
+                case .insert(let event):
+                    if let parsed = parsePracticeRecord(event.record), parsed.scheduledBy != myId {
+                        onPracticeScheduled?(formatPracticeBody(parsed))
+                    }
+                case .update(let event):
+                    if let parsed = parsePracticeRecord(event.record), parsed.scheduledBy != myId {
+                        let unchanged = practices.first(where: { $0.id == parsed.id }).map {
+                            $0.date == parsed.date &&
+                            $0.startMinutes == parsed.startMinutes &&
+                            $0.endMinutes == parsed.endMinutes &&
+                            $0.location == parsed.location
+                        } ?? false
+                        if !unchanged {
+                            onPracticeUpdated?(formatPracticeBody(parsed))
+                        }
+                    }
+                case .delete(let event):
+                    if case .string(let idStr) = event.oldRecord["id"],
+                       let id = UUID(uuidString: idStr),
+                       let cached = practices.first(where: { $0.id == id }),
+                       cached.scheduledBy != myId {
+                        let parsed = ParsedPractice(id: cached.id, date: cached.date, startMinutes: cached.startMinutes, endMinutes: cached.endMinutes, location: cached.location, scheduledBy: cached.scheduledBy)
+                        onPracticeCancelled?(formatPracticeBody(parsed))
+                    }
+                default:
+                    break
+                }
                 await loadPractices()
             }
         }
@@ -808,6 +840,35 @@ final class BandManager: ObservableObject {
             ScheduledPractice(id: UUID(), bandId: bandId, date: d(18), startMinutes: 660, endMinutes: 780, location: "The Rehearsal Room", scheduledBy: jamesId, scheduledAt: now, calendarEventId: nil),
             ScheduledPractice(id: UUID(), bandId: bandId, date: d(25), startMinutes: 660, endMinutes: 780, location: "The Rehearsal Room", scheduledBy: jamesId, scheduledAt: now, calendarEventId: nil),
         ]
+    }
+
+    private struct ParsedPractice {
+        let id: UUID
+        let date: String
+        let startMinutes: Int
+        let endMinutes: Int
+        let location: String?
+        let scheduledBy: UUID
+    }
+
+    private func parsePracticeRecord(_ record: [String: AnyJSON]) -> ParsedPractice? {
+        guard case .string(let idStr) = record["id"],
+              let id = UUID(uuidString: idStr),
+              case .string(let date) = record["date"],
+              case .integer(let start) = record["start_minutes"],
+              case .integer(let end) = record["end_minutes"],
+              case .string(let scheduledByStr) = record["scheduled_by"],
+              let scheduledBy = UUID(uuidString: scheduledByStr) else { return nil }
+        var location: String?
+        if case .string(let loc) = record["location"] { location = loc }
+        return ParsedPractice(id: id, date: date, startMinutes: start, endMinutes: end, location: location, scheduledBy: scheduledBy)
+    }
+
+    private func formatPracticeBody(_ p: ParsedPractice) -> String {
+        let dateStr = TimeHelpers.fullDisplayDate(p.date)
+        let timeStr = "\(TimeHelpers.formatTime(p.startMinutes)) – \(TimeHelpers.formatTime(p.endMinutes))"
+        let bandName = currentBand?.name ?? "Band"
+        return "\(bandName) · \(dateStr) · \(timeStr)"
     }
 }
 

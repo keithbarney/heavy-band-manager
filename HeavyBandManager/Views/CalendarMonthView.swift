@@ -38,13 +38,15 @@ struct CalendarMonthView: View {
                             Circle().fill(Color.themeSuccess).frame(width: 6, height: 6)
                             Text("All members")
                                 .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.secondary)
                         }
-                        HStack(spacing: 4) {
-                            Circle().fill(Color.themeWarning).frame(width: 6, height: 6)
-                            Text("Some members")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                        if let band = bandManager.currentBand, band.minMembersRequired < bandManager.members.count {
+                            HStack(spacing: 4) {
+                                Circle().fill(Color.themeWarning).frame(width: 6, height: 6)
+                                Text("\(band.minMembersRequired) of \(bandManager.members.count)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
                     }
                 }
