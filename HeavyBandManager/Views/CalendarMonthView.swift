@@ -164,6 +164,7 @@ struct CalendarMonthView: View {
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(.secondary)
                     }
+                    .padding(.leading, -6)
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
