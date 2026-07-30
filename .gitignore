@@ -37,3 +37,4 @@ HeavyBandManager/Secrets.swift
 *.moved-aside
 *.xccheckout
 *.xcscmblueprint
+.env.appstore

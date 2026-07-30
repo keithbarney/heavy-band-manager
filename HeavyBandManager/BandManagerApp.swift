@@ -49,15 +49,42 @@ struct BandManagerApp: App {
                     bandManager.onPracticeCancelled = { body in
                         sendLocalNotification(title: "Practice Cancelled", body: body)
                     }
+                    bandManager.onPracticeDeleted = { practiceId in
+                        Task {
+                            try? await calendarManager.deletePracticeEvent(practiceId: practiceId)
+                        }
+                    }
+                    bandManager.onPracticeListChanged = {
+                        Task {
+                            await bandManager.syncMissingCalendarEvents(
+                                calendarManager: calendarManager,
+                                reconcileStaleEvents: true
+                            )
+                        }
+                    }
                 }
                 .onChange(of: authManager.user) { _, newUser in
                     if newUser != nil {
                         Task {
-                            await bandManager.loadBands()
-                            await bandManager.syncMissingCalendarEvents(calendarManager: calendarManager)
+                            if await bandManager.loadBands() {
+                                await bandManager.syncMissingCalendarEvents(
+                                    calendarManager: calendarManager,
+                                    reconcileStaleEvents: true
+                                )
+                            }
                         }
                     } else {
                         bandManager.cleanup()
+                    }
+                }
+                .onChange(of: calendarManager.isAuthorized) { _, authorized in
+                    if authorized, authManager.user != nil {
+                        Task {
+                            await bandManager.syncMissingCalendarEvents(
+                                calendarManager: calendarManager,
+                                reconcileStaleEvents: true
+                            )
+                        }
                     }
                 }
                 .onChange(of: scenePhase) { _, newPhase in

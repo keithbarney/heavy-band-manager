@@ -22,6 +22,10 @@ schemes:
         HeavyBandManager: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - HeavyBandManagerTests
 
 targets:
   HeavyBandManager:
@@ -50,6 +54,17 @@ targets:
       properties:
         com.apple.developer.applesignin:
           - Default
+
+  HeavyBandManagerTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - HeavyBandManagerTests
+    dependencies:
+      - target: HeavyBandManager
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: "YES"
 
 packages:
   Supabase:
