@@ -3,7 +3,7 @@ options:
   bundleIdPrefix: com.keithbarney
   deploymentTarget:
     iOS: "26.0"
-  xcodeVersion: "17.0"
+  xcodeVersion: "26.0"
   generateEmptyDirectories: true
 
 settings:
@@ -69,7 +69,7 @@ targets:
 packages:
   Supabase:
     url: https://github.com/supabase/supabase-swift
-    majorVersion: 2.0.0
+    exactVersion: 2.43.0
   DialKit:
     url: https://github.com/mikelikesdesign/dialkit-ios
-    from: "0.2.0"
+    exactVersion: 0.2.0

@@ -4,6 +4,7 @@
 xcuserdata/
 DerivedData/
 build/
+.release/
 *.pbxuser
 *.mode1v3
 *.mode2v3
@@ -21,6 +22,7 @@ build/
 .build/
 .swiftpm/
 Package.resolved
+!release/Package.resolved
 
 # CocoaPods (if ever added)
 Pods/
@@ -38,3 +40,8 @@ HeavyBandManager/Secrets.swift
 *.xccheckout
 *.xcscmblueprint
 .env.appstore
+.env.release
+AuthKey_*.p8
+*.p8
+*.p12
+*.mobileprovision
