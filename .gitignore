@@ -5,6 +5,8 @@ xcuserdata/
 DerivedData/
 build/
 .release/
+supabase/.temp/
+supabase/.branches/
 *.pbxuser
 *.mode1v3
 *.mode2v3

@@ -140,6 +140,15 @@ struct SettingsView: View {
                                 .foregroundStyle(.blue)
                         }
                     }
+
+                    if bandManager.isLeader, let band = bandManager.currentBand {
+                        InviteMembersButton(
+                            invitation: BandInvitation(
+                                bandName: band.name,
+                                inviteCode: band.inviteCode
+                            )
+                        )
+                    }
                 } header: {
                     Text("Band")
                 }

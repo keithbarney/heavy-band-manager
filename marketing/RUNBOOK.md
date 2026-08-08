@@ -88,6 +88,29 @@ Override the simulator when needed:
 SIMULATOR_DESTINATION='platform=iOS Simulator,name=iPhone 17' make preflight
 ```
 
+The pull-request workflow also starts a clean local Supabase database, replays
+every checked-in migration, runs the invite/security pgTAP suite, and lints the
+public schema. To run that backend gate locally:
+
+```sh
+supabase db start
+supabase test db supabase/tests/database/secure_band_invites.test.sql
+supabase db lint --local --schema public --level warning --fail-on error
+supabase stop --no-backup
+```
+
+The invite migration is release-sensitive: it rotates legacy short invite
+codes and adds the secure RPCs, while initially leaving enforcement disabled so
+older App Store builds can keep joining during rollout. After the approved app
+update reaches the agreed adoption or support cutoff, verify the clean-room
+database job, record that cutoff and the production decision in Linear, and run
+the reviewed flag statement in
+`supabase/rollouts/enable_invite_enforcement.sql`. Merely having a build
+available is not sufficient: that second step restricts band visibility and
+removes direct join writes for clients that have not updated. The migration
+also aborts rather than guessing dates for legacy weekday-only schedules; any
+such rows require an explicit date backfill first.
+
 ### 3. Merge only after review and QA
 
 The `iOS CI` GitHub workflow runs the same preflight for pull requests and
