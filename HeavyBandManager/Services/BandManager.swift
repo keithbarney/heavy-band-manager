@@ -293,56 +293,33 @@ final class BandManager: ObservableObject {
     // MARK: - Join Band
 
     func joinBand(inviteCode: String, userName: String, instrument: String?) async throws {
-        let userId = try currentUserId()
         let code = inviteCode.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Fetch band + members separately to avoid nested Codable issues
-        let matchingBands: [Band] = try await Config.supabase
-            .from("bands")
-            .select()
-            .eq("invite_code", value: code)
-            .execute()
-            .value
-
-        guard let band = matchingBands.first else {
-            throw NSError(domain: "BandManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "No band found with that invite code"])
-        }
-
-        let existingMembers: [BandMember] = try await Config.supabase
-            .from("band_members")
-            .select()
-            .eq("band_id", value: band.id.uuidString)
-            .execute()
-            .value
-
-        if existingMembers.contains(where: { $0.userId == userId }) {
-            try await refreshBandList()
-            if let joined = bands.first(where: { $0.id == band.id }) {
-                await selectBand(joined)
-            }
-            return
-        }
-
-        let colorIndex = existingMembers.count % MemberColors.palette.count
-        let memberData: [String: AnyJSON] = [
-            "band_id": .string(band.id.uuidString),
-            "user_id": .string(userId.uuidString),
-            "name": .string(userName),
-            "instrument": instrument.map { .string($0) } ?? .null,
-            "color": .string(MemberColors.palette[colorIndex].hexString),
+        let params: [String: AnyJSON] = [
+            "p_invite_code": .string(code),
+            "p_member_name": .string(userName),
+            "p_instrument": instrument.map { .string($0) } ?? .null,
         ]
 
-        let _: BandMember = try await Config.supabase
-            .from("band_members")
-            .insert(memberData)
-            .select()
-            .single()
+        let joinedBandId: UUID? = try await Config.supabase
+            .rpc("join_band_with_invite_code", params: params)
             .execute()
             .value
+
+        guard let joinedBandId else {
+            throw NSError(
+                domain: "BandManager",
+                code: -1,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "That invite code isn't valid, or there have been too many attempts. Try again shortly."
+                ]
+            )
+        }
 
         try await refreshBandList()
 
-        if let joined = bands.first(where: { $0.id == band.id }) {
+        if let joined = bands.first(where: { $0.id == joinedBandId }) {
             await selectBand(joined)
         }
     }
@@ -733,9 +710,13 @@ final class BandManager: ObservableObject {
         guard let id = targetId else { return }
         do {
             try await Config.supabase
-                .from("band_members")
-                .update(["instrument": AnyJSON.string(instrument)])
-                .eq("id", value: id.uuidString)
+                .rpc(
+                    "update_member_instrument",
+                    params: [
+                        "p_member_id": AnyJSON.string(id.uuidString),
+                        "p_instrument": AnyJSON.string(instrument),
+                    ]
+                )
                 .execute()
             await reloadCurrentBandMembers()
         } catch { print("Update instrument error: \(error)") }

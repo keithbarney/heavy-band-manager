@@ -1,0 +1,1 @@
+-- Intentionally empty. Tests create isolated fixture data inside transactions.
