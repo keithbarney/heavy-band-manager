@@ -98,7 +98,7 @@ struct OnboardingView: View {
                         .lineLimit(1)
                         .layoutPriority(1)
                     Spacer(minLength: 16)
-                    TextField("XXX-XXXX", text: $inviteCode)
+                    TextField("HBM-…", text: $inviteCode)
                         .multilineTextAlignment(.trailing)
                         .foregroundStyle(.secondary)
                         .textInputAutocapitalization(.characters)
