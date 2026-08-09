@@ -491,6 +491,7 @@ struct SettingsView: View {
         isSyncing = true
         let start = Date()
         let end = Calendar.current.date(byAdding: .month, value: 6, to: start) ?? start
+        await bandManager.syncMissingCalendarEvents(calendarManager: calendarManager)
         await bandManager.syncCalendar(calendarManager: calendarManager, from: start, to: end)
         isSyncing = false
     }

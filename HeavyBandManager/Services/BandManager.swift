@@ -14,6 +14,10 @@ final class BandManager: ObservableObject {
     private var slotsChannel: RealtimeChannelV2?
     private var practicesChannel: RealtimeChannelV2?
     private var membersChannel: RealtimeChannelV2?
+    private var authoritativePracticeBandId: UUID?
+    private var authoritativePractices: [ScheduledPractice] = []
+    private var authoritativePracticeLoadRequestId = UUID()
+    private var filteredPracticeLoadRequestId = UUID()
 
     // MARK: - Current member helper
 
@@ -41,7 +45,8 @@ final class BandManager: ObservableObject {
 
     /// Full load: fetches band list, selects a band, loads its data, subscribes to realtime.
     /// Used on app launch and auth state changes.
-    func loadBands() async {
+    @discardableResult
+    func loadBands() async -> Bool {
         isLoading = true
         defer { isLoading = false }
         error = nil
@@ -52,12 +57,18 @@ final class BandManager: ObservableObject {
             if let band = currentBand {
                 lastBandId = band.id.uuidString
                 async let slotsLoad: Void = loadSlots()
-                async let practicesLoad: Void = loadPractices()
-                _ = await (slotsLoad, practicesLoad)
+                async let practicesLoad = loadPractices()
+                let (_, loadedAuthoritativePractices) = await (slotsLoad, practicesLoad)
                 subscribeToChanges()
+                if loadedAuthoritativePractices {
+                    onPracticeListChanged?()
+                }
+                return loadedAuthoritativePractices
             }
+            return false
         } catch {
             self.error = error.localizedDescription
+            return false
         }
     }
 
@@ -168,14 +179,19 @@ final class BandManager: ObservableObject {
         unsubscribeAllChannels()
         slots = []
         practices = []
+        authoritativePracticeBandId = nil
+        authoritativePractices = []
 
         currentBand = band
         lastBandId = band.id.uuidString
 
         async let slotsLoad: Void = loadSlots()
-        async let practicesLoad: Void = loadPractices()
-        _ = await (slotsLoad, practicesLoad)
+        async let practicesLoad = loadPractices()
+        let (_, loadedAuthoritativePractices) = await (slotsLoad, practicesLoad)
         subscribeToChanges()
+        if loadedAuthoritativePractices {
+            onPracticeListChanged?()
+        }
     }
 
     func loadSlots(from startDate: String? = nil, to endDate: String? = nil) async {
@@ -200,9 +216,21 @@ final class BandManager: ObservableObject {
         }
     }
 
-    func loadPractices(from startDate: String? = nil, to endDate: String? = nil) async {
-        if SCREENSHOT_MODE { return }
-        guard let bandId = currentBand?.id else { return }
+    /// Returns true only for a successful, unfiltered snapshot of the band that
+    /// is still selected when the request completes.
+    @discardableResult
+    func loadPractices(from startDate: String? = nil, to endDate: String? = nil) async -> Bool {
+        if SCREENSHOT_MODE { return false }
+        guard let bandId = currentBand?.id else { return false }
+        let requestId = UUID()
+        let isAuthoritativeRequest = startDate == nil && endDate == nil
+        if isAuthoritativeRequest {
+            authoritativePracticeLoadRequestId = requestId
+            authoritativePracticeBandId = nil
+            authoritativePractices = []
+        } else {
+            filteredPracticeLoadRequestId = requestId
+        }
         do {
             var query = Config.supabase
                 .from("scheduled_practices")
@@ -216,9 +244,25 @@ final class BandManager: ObservableObject {
                 query = query.lte("date", value: end)
             }
 
-            practices = try await query.order("date").execute().value
+            let fetchedPractices: [ScheduledPractice] = try await query.order("date").execute().value
+            let isLatestRequest = isAuthoritativeRequest
+                ? authoritativePracticeLoadRequestId == requestId
+                : filteredPracticeLoadRequestId == requestId
+            guard isLatestRequest, currentBand?.id == bandId else { return false }
+            practices = fetchedPractices
+            if isAuthoritativeRequest {
+                authoritativePracticeBandId = bandId
+                authoritativePractices = fetchedPractices
+            }
+            return isAuthoritativeRequest
         } catch {
-            self.error = error.localizedDescription
+            let isLatestRequest = isAuthoritativeRequest
+                ? authoritativePracticeLoadRequestId == requestId
+                : filteredPracticeLoadRequestId == requestId
+            if isLatestRequest {
+                self.error = error.localizedDescription
+            }
+            return false
         }
     }
 
@@ -329,19 +373,15 @@ final class BandManager: ObservableObject {
             // Create Apple Calendar event if calendar manager is available
             if let cm = calendarManager, let practiceDate = TimeHelpers.date(from: date) {
                 do {
-                    let eventId = try await cm.createPracticeEvent(
+                    _ = try await cm.createPracticeEvent(
+                        practiceId: practice.id,
+                        bandId: bandId,
                         date: practiceDate,
                         startMinutes: startMinutes,
                         endMinutes: endMinutes,
                         bandName: bandName,
                         location: location
                     )
-                    // Save the calendar_event_id back to Supabase
-                    try await Config.supabase
-                        .from("scheduled_practices")
-                        .update(["calendar_event_id": AnyJSON.string(eventId)])
-                        .eq("id", value: practice.id.uuidString)
-                        .execute()
                 } catch {
                     // Calendar event creation failed — practice is still saved to Supabase
                     print("Calendar event creation skipped: \(error.localizedDescription)")
@@ -356,18 +396,14 @@ final class BandManager: ObservableObject {
 
     func cancelPractice(_ practiceId: UUID, calendarManager: CalendarManager? = nil) async {
         do {
-            // Find the practice to get its calendar_event_id before deleting
-            if let cm = calendarManager,
-               let practice = practices.first(where: { $0.id == practiceId }),
-               let eventId = practice.calendarEventId {
-                try? await cm.deletePracticeEvent(eventIdentifier: eventId)
-            }
-
             try await Config.supabase
                 .from("scheduled_practices")
                 .delete()
                 .eq("id", value: practiceId.uuidString)
                 .execute()
+            if let cm = calendarManager {
+                try? await cm.deletePracticeEvent(practiceId: practiceId)
+            }
             await loadPractices()
         } catch {
             self.error = error.localizedDescription
@@ -376,36 +412,47 @@ final class BandManager: ObservableObject {
 
     // MARK: - Calendar Sync for Existing Practices
 
-    /// Creates calendar events for any scheduled practices that are missing a calendar_event_id.
+    /// Creates this device's calendar event for practices without a valid local mapping.
     /// Call this on app launch after practices have been loaded.
-    func syncMissingCalendarEvents(calendarManager: CalendarManager) async {
-        guard let bandName = currentBand?.name else { return }
+    func syncMissingCalendarEvents(
+        calendarManager: CalendarManager,
+        reconcileStaleEvents: Bool = false
+    ) async {
+        guard let band = currentBand else { return }
         guard calendarManager.isAuthorized else { return }
 
-        let needsSync = practices.filter { $0.calendarEventId == nil }
-        guard !needsSync.isEmpty else { return }
+        let practicesForSync: [ScheduledPractice]
+        if reconcileStaleEvents, authoritativePracticeBandId == band.id {
+            practicesForSync = authoritativePractices
+            do {
+                try await calendarManager.reconcilePracticeEvents(
+                    for: band.id,
+                    activePracticeIds: Set(practicesForSync.map(\.id))
+                )
+            } catch {
+                print("Failed to remove stale calendar events: \(error.localizedDescription)")
+            }
+        } else {
+            practicesForSync = practices
+        }
 
-        for practice in needsSync {
+        for practice in practicesForSync {
             guard let practiceDate = TimeHelpers.date(from: practice.date) else { continue }
             do {
-                let eventId = try await calendarManager.createPracticeEvent(
+                _ = try await calendarManager.createPracticeEvent(
+                    practiceId: practice.id,
+                    bandId: band.id,
+                    legacyEventIdentifier: practice.calendarEventId,
                     date: practiceDate,
                     startMinutes: practice.startMinutes,
                     endMinutes: practice.endMinutes,
-                    bandName: bandName,
+                    bandName: band.name,
                     location: practice.location
                 )
-                try await Config.supabase
-                    .from("scheduled_practices")
-                    .update(["calendar_event_id": AnyJSON.string(eventId)])
-                    .eq("id", value: practice.id.uuidString)
-                    .execute()
             } catch {
                 print("Failed to sync calendar event for practice \(practice.id): \(error.localizedDescription)")
             }
         }
-        // Reload to pick up the updated calendar_event_id values
-        await loadPractices()
     }
 
     // MARK: - Calendar Sync
@@ -485,6 +532,8 @@ final class BandManager: ObservableObject {
     var onPracticeScheduled: ((String) -> Void)?
     var onPracticeUpdated: ((String) -> Void)?
     var onPracticeCancelled: ((String) -> Void)?
+    var onPracticeDeleted: ((UUID) -> Void)?
+    var onPracticeListChanged: (() -> Void)?
 
     private func unsubscribeAllChannels() {
         if let ch = slotsChannel { Task { await ch.unsubscribe() } }
@@ -539,16 +588,21 @@ final class BandManager: ObservableObject {
                     }
                 case .delete(let event):
                     if case .string(let idStr) = event.oldRecord["id"],
-                       let id = UUID(uuidString: idStr),
-                       let cached = practices.first(where: { $0.id == id }),
-                       cached.scheduledBy != myId {
-                        let parsed = ParsedPractice(id: cached.id, date: cached.date, startMinutes: cached.startMinutes, endMinutes: cached.endMinutes, location: cached.location, scheduledBy: cached.scheduledBy)
-                        onPracticeCancelled?(formatPracticeBody(parsed))
+                       let id = UUID(uuidString: idStr) {
+                        onPracticeDeleted?(id)
+                        if let cached = practices.first(where: { $0.id == id }),
+                           cached.scheduledBy != myId {
+                            let parsed = ParsedPractice(id: cached.id, date: cached.date, startMinutes: cached.startMinutes, endMinutes: cached.endMinutes, location: cached.location, scheduledBy: cached.scheduledBy)
+                            onPracticeCancelled?(formatPracticeBody(parsed))
+                        }
                     }
                 default:
                     break
                 }
-                await loadPractices()
+                let loadedAuthoritativePractices = await loadPractices()
+                if loadedAuthoritativePractices {
+                    onPracticeListChanged?()
+                }
             }
         }
 
@@ -615,6 +669,8 @@ final class BandManager: ObservableObject {
         currentBand = nil
         slots = []
         practices = []
+        authoritativePracticeBandId = nil
+        authoritativePractices = []
     }
 
     // MARK: - Avatar Upload

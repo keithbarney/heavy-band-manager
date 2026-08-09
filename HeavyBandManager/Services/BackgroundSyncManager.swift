@@ -54,7 +54,7 @@ enum BackgroundSyncManager {
         let userId = Config.supabase.auth.currentUser!.id
 
         // Load calendar prefs
-        let prefsKey = "heavy-band-manager:calendar-prefs"
+        let prefsKey = CalendarPreferenceKeys.preferences
         guard let data = UserDefaults.standard.data(forKey: prefsKey),
               let prefs = try? JSONDecoder().decode(CalendarPrefs.self, from: data),
               !(prefs.autoSync == false) else { return }
@@ -184,17 +184,8 @@ enum BackgroundSyncManager {
             }
         }
 
-        // Update last sync timestamp
-        let newPrefs = CalendarPrefs(
-            selectedCalendarIds: prefs.selectedCalendarIds,
-            lastSyncDate: Date(),
-            calendarName: prefs.calendarName,
-            autoSync: prefs.autoSync,
-            calendarColorHex: prefs.calendarColorHex,
-            calendarIdentifier: prefs.calendarIdentifier
-        )
-        if let encoded = try? JSONEncoder().encode(newPrefs) {
-            UserDefaults.standard.set(encoded, forKey: prefsKey)
-        }
+        // Store only the timestamp so foreground preference and registry writes
+        // cannot be overwritten by a background sync snapshot.
+        UserDefaults.standard.set(Date(), forKey: CalendarPreferenceKeys.lastSyncDate)
     }
 }

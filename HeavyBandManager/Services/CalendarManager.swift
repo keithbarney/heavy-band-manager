@@ -14,8 +14,9 @@ final class CalendarManager: ObservableObject {
     @Published var autoSync = true
 
     private var practiceCalendarIdentifier: String?
+    private var practiceEventRegistry = PracticeEventRegistry()
     private let store = EKEventStore()
-    private let prefsKey = "heavy-band-manager:calendar-prefs"
+    private let prefsKey = CalendarPreferenceKeys.preferences
 
     struct DeviceCalendar: Identifiable {
         let id: String
@@ -249,14 +250,31 @@ final class CalendarManager: ObservableObject {
         savePrefs()
     }
 
-    /// Creates an Apple Calendar event for a scheduled practice.
-    /// Returns the EKEvent identifier string for storage in Supabase.
-    func createPracticeEvent(date: Date, startMinutes: Int, endMinutes: Int, bandName: String, location: String?) async throws -> String {
+    /// Creates this device's Apple Calendar event for a scheduled practice.
+    /// Reuses an existing local event or adopts a valid legacy identifier.
+    func createPracticeEvent(
+        practiceId: UUID,
+        bandId: UUID,
+        legacyEventIdentifier: String? = nil,
+        date: Date,
+        startMinutes: Int,
+        endMinutes: Int,
+        bandName: String,
+        location: String?
+    ) async throws -> String {
         if !isAuthorized {
             await requestAccess()
         }
         guard isAuthorized else {
             throw CalendarError.accessDenied
+        }
+
+        if let existingIdentifier = practiceEventIdentifier(
+            for: practiceId,
+            bandId: bandId,
+            legacyEventIdentifier: legacyEventIdentifier
+        ) {
+            return existingIdentifier
         }
 
         let calendar = try getOrCreateBandCalendar(bandName: bandName)
@@ -287,15 +305,70 @@ final class CalendarManager: ObservableObject {
         event.addAlarm(EKAlarm(relativeOffset: -30 * 60))
 
         try store.save(event, span: .thisEvent)
-        return event.eventIdentifier
+        guard let identifier = event.eventIdentifier else {
+            throw CalendarError.eventIdentifierUnavailable
+        }
+        practiceEventRegistry.record(identifier, for: practiceId, bandId: bandId)
+        savePrefs()
+        return identifier
     }
 
-    /// Deletes an Apple Calendar event by its identifier.
-    func deletePracticeEvent(eventIdentifier: String) async throws {
-        guard let event = store.event(withIdentifier: eventIdentifier) else { return }
-        try store.remove(event, span: .thisEvent)
+    /// Deletes this device's Apple Calendar event for a shared practice.
+    func deletePracticeEvent(practiceId: UUID) async throws {
+        let currentStatus = EKEventStore.authorizationStatus(for: .event)
+        guard currentStatus == .fullAccess || currentStatus == .authorized else {
+            authStatus = currentStatus
+            isAuthorized = false
+            throw CalendarError.accessDenied
+        }
+        guard let eventIdentifier = practiceEventRegistry.identifier(for: practiceId) else { return }
+        if let event = store.event(withIdentifier: eventIdentifier) {
+            try store.remove(event, span: .thisEvent)
+        }
+        practiceEventRegistry.removeIdentifier(for: practiceId)
+        savePrefs()
     }
 
+    /// Removes calendar events whose shared practices no longer exist in a fully
+    /// loaded band. Band ownership prevents one band's refresh from touching another.
+    func reconcilePracticeEvents(for bandId: UUID, activePracticeIds: Set<UUID>) async throws {
+        let stalePracticeIds = practiceEventRegistry
+            .practiceIds(for: bandId)
+            .subtracting(activePracticeIds)
+        var firstError: Error?
+
+        for practiceId in stalePracticeIds {
+            do {
+                try await deletePracticeEvent(practiceId: practiceId)
+            } catch {
+                firstError = firstError ?? error
+            }
+        }
+
+        if let firstError {
+            throw firstError
+        }
+    }
+
+    private func practiceEventIdentifier(
+        for practiceId: UUID,
+        bandId: UUID,
+        legacyEventIdentifier: String?
+    ) -> String? {
+        let originalRegistry = practiceEventRegistry
+        defer {
+            if practiceEventRegistry != originalRegistry {
+                savePrefs()
+            }
+        }
+        let eventStore = store
+        return practiceEventRegistry.resolveIdentifier(
+            for: practiceId,
+            bandId: bandId,
+            legacyIdentifier: legacyEventIdentifier,
+            eventExists: { eventStore.event(withIdentifier: $0) != nil }
+        )
+    }
 
     // MARK: - Persistence
 
@@ -303,10 +376,13 @@ final class CalendarManager: ObservableObject {
         guard let data = UserDefaults.standard.data(forKey: prefsKey),
               let prefs = try? JSONDecoder().decode(CalendarPrefs.self, from: data) else { return }
         selectedCalendarIds = Set(prefs.selectedCalendarIds)
-        lastSyncDate = prefs.lastSyncDate
+        lastSyncDate = UserDefaults.standard.object(
+            forKey: CalendarPreferenceKeys.lastSyncDate
+        ) as? Date ?? prefs.lastSyncDate
         practiceCalendarName = prefs.calendarName ?? "Band Practice"
         autoSync = prefs.autoSync ?? true
         practiceCalendarIdentifier = prefs.calendarIdentifier
+        practiceEventRegistry = prefs.practiceEventRegistry ?? PracticeEventRegistry()
         if let hex = prefs.calendarColorHex, !hex.isEmpty {
             practiceCalendarColor = Color(hex: hex)
         }
@@ -319,10 +395,14 @@ final class CalendarManager: ObservableObject {
             calendarName: practiceCalendarName,
             autoSync: autoSync,
             calendarColorHex: UIColor(practiceCalendarColor).toHexString(),
-            calendarIdentifier: practiceCalendarIdentifier
+            calendarIdentifier: practiceCalendarIdentifier,
+            practiceEventRegistry: practiceEventRegistry
         )
         if let data = try? JSONEncoder().encode(prefs) {
             UserDefaults.standard.set(data, forKey: prefsKey)
+        }
+        if let lastSyncDate {
+            UserDefaults.standard.set(lastSyncDate, forKey: CalendarPreferenceKeys.lastSyncDate)
         }
     }
 }
@@ -344,6 +424,11 @@ struct NewSlot {
     let memberId: UUID
 }
 
+enum CalendarPreferenceKeys {
+    static let preferences = "heavy-band-manager:calendar-prefs"
+    static let lastSyncDate = "heavy-band-manager:calendar-last-sync-date"
+}
+
 struct CalendarPrefs: Codable {
     let selectedCalendarIds: [String]
     let lastSyncDate: Date?
@@ -351,6 +436,7 @@ struct CalendarPrefs: Codable {
     let autoSync: Bool?
     let calendarColorHex: String?
     let calendarIdentifier: String?
+    let practiceEventRegistry: PracticeEventRegistry?
 }
 
 // MARK: - Color Hex Codec
@@ -370,11 +456,13 @@ extension UIColor {
 enum CalendarError: LocalizedError {
     case accessDenied
     case invalidDate
+    case eventIdentifierUnavailable
 
     var errorDescription: String? {
         switch self {
         case .accessDenied: return "Calendar access denied"
         case .invalidDate: return "Invalid practice date"
+        case .eventIdentifierUnavailable: return "Could not identify the saved calendar event"
         }
     }
 }
