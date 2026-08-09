@@ -1,7 +1,8 @@
 # Band Practice — App Store Listing
 
 **Bundle ID:** com.keithbarney.heavybandmanager
-**Version:** 0.1.0 (build 1)
+**Current public version:** 1.2.0
+**Current repository version:** 1.2.0 (build 7)
 **Primary category:** Music
 **Secondary category:** Productivity
 **Age rating:** 4+
@@ -11,7 +12,7 @@
 
 ## App name (max 30 chars)
 
-Band Practice
+Band Practice Calendar
 
 ## Subtitle (max 30 chars)
 
@@ -46,9 +47,13 @@ Built for working bands who'd rather play music than negotiate Mondays.
 
 band,rehearsal,practice,scheduling,musicians,calendar,availability,group,music,booking,studio,bands
 
-## What's New (v0.1.0)
+## What's New (v1.2.0)
 
-Hello, world. This is the first release of Band Practice — share your calendar with the band, find days that overlap, schedule rehearsals together. We're just getting started; let us know what you'd want next.
+- Get push notifications when a practice is scheduled, updated, or cancelled.
+- Availability now shows 6 months ahead.
+- Customize the name and color of the synced practice calendar.
+- Delete your account directly from Settings.
+- UI polish on the calendar legend and band picker.
 
 ## Support / Marketing URLs
 

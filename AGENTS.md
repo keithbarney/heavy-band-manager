@@ -10,27 +10,33 @@ iOS app for bands to coordinate rehearsal scheduling via shared availability cal
 
 ## Identity
 - **Bundle ID:** `com.keithbarney.heavybandmanager`
-- **App Store name:** Band Practice
+- **App Store name:** Band Practice Calendar
 - **Display name (CFBundleDisplayName):** Band Practice
+- **Apple ID:** `6763776073`
+- **App Store:** https://apps.apple.com/us/app/band-practice-calendar/id6763776073
 - **Team ID:** `BXKNJTU253`
 - **Categories:** Music (primary), Productivity (secondary)
 
-## App Store Submission
+## App Store Releases
 
-**Status:** v0.1.0, full public submission planned. App Store Connect record not yet created. Apple Developer Program enrolled (paid).
+**Status:** Live on the public App Store. Current repository version is `1.2.0 (7)`.
 
 **Listing decisions:**
 - Screenshots: iPhone 6.9" only (1320×2868), captured from simulator (`xcrun simctl io <UDID> screenshot`). Apple auto-scales for smaller devices. Project is `TARGETED_DEVICE_FAMILY: "1"` (iPhone only) — no iPad screenshots needed.
-- Icon: placeholder for v0.1.0; replace before public review submission.
 - Description / keywords / promo text: Codex drafts, Keith reviews.
-- Privacy policy + support: GitHub Gists, following existing pattern (`<App Name> — Privacy Policy` / `<App Name> — Support`). See gists `e5755b85` (Sports Calendar Sync privacy) for reference template.
+- Privacy policy: https://gist.github.com/keithbarney/7a8b49cec4807927f0a3368daa9eff71
+- Support: https://gist.github.com/keithbarney/9fa6589b17e69b4f6efe21905072e5bb
 - iOS 26 deployment target: keeping for now, revisit if Apple flags.
+- Release commands and GitHub environment setup are documented in `marketing/RUNBOOK.md`.
+- App Store Connect upload may be automated after validation; selecting a build for App Review and releasing it to customers require explicit user approval.
 
 ## Conventions
 - **Source of truth:** `project.yml` — never edit `.xcodeproj` directly. Run `xcodegen` after changes.
 - **Screens named to match Figma:** SwiftUI struct names mirror Figma frame names (see `figma-sync.md` and recent commit `0ed2748`).
 - **Screenshot mode:** `SCREENSHOT_MODE` flag in AuthGate bypasses login + shows mock data. Set to `false` before committing.
 - **Secrets:** `HeavyBandManager/Secrets.swift` (not committed) holds Supabase URL/anon key.
+- **Release artifacts:** `.release/` is generated and ignored.
+- **Versioning:** Run `make version VERSION=x.y.z` to update `project.yml`; never edit the generated Xcode project.
 
 ## Project Tracking
 - **System of record:** This project is managed in Linear.
