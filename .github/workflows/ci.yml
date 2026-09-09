@@ -34,7 +34,7 @@ jobs:
         run: supabase db start
 
       - name: Run database security tests
-        run: supabase test db supabase/tests/database/secure_band_invites.test.sql
+        run: supabase test db
 
       - name: Lint database schema
         run: supabase db lint --local --schema public --level warning --fail-on error

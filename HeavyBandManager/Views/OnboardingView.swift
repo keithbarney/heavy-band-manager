@@ -3,8 +3,9 @@ import SwiftUI
 struct OnboardingView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var bandManager: BandManager
+    @EnvironmentObject var calendarManager: CalendarManager
 
-    enum Step: Hashable { case createBand, createProfile }
+    enum Step: Hashable { case createBand, createProfile, availability }
     @State private var path: [Step] = []
 
     // Band fields
@@ -27,6 +28,7 @@ struct OnboardingView: View {
     @State private var isSubmitting = false
     @State private var errorMessage: String?
     @State private var didPrefill = false
+    @AppStorage("onboardingAvailabilityPending") private var onboardingAvailabilityPending = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -35,6 +37,16 @@ struct OnboardingView: View {
                     switch step {
                     case .createBand: createBandView
                     case .createProfile: createProfileView
+                    case .availability:
+                        MyAvailabilityView(
+                            onFinished: {
+                                onboardingAvailabilityPending = false
+                                path = []
+                            },
+                            isOnboarding: true
+                        )
+                        .environmentObject(bandManager)
+                        .environmentObject(calendarManager)
                     }
                 }
         }
@@ -47,6 +59,11 @@ struct OnboardingView: View {
                     userName = email.components(separatedBy: "@").first ?? ""
                 }
                 didPrefill = true
+            }
+            if bandManager.currentBand != nil, path.isEmpty,
+               onboardingAvailabilityPending || bandManager.currentMember?.availabilitySetupComplete == false {
+                onboardingAvailabilityPending = true
+                path = [.availability]
             }
         }
     }
@@ -246,8 +263,13 @@ struct OnboardingView: View {
                 }
 
                 LabeledContent("Email") {
+#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+                    Text("tester@example.com")
+                        .foregroundStyle(.secondary)
+#else
                     Text(authManager.user?.email ?? "")
                         .foregroundStyle(.secondary)
+#endif
                 }
 
                 TextField("Your Name", text: $userName)
@@ -273,7 +295,7 @@ struct OnboardingView: View {
                 if isSubmitting {
                     ProgressView()
                 } else {
-                    Text("Get Started")
+                    Text("Continue")
                         .bold()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
@@ -291,9 +313,20 @@ struct OnboardingView: View {
 
     /// Join via invite code from Welcome, then go to profile step
     private func joinWithCode() async {
+#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+        guard inviteCode.uppercased() == "TEST123" else {
+            errorMessage = "For this preview, use invite code TEST123."
+            return
+        }
+        onboardingAvailabilityPending = true
+        bandManager.configureOnboardingPreview(name: "Test Band", userName: userName, instrument: nil)
+        path.append(.createProfile)
+        return
+#endif
         isSubmitting = true
         errorMessage = nil
         do {
+            onboardingAvailabilityPending = true
             try await bandManager.joinBand(inviteCode: inviteCode, userName: userName, instrument: nil)
             // After joining, go directly to profile step
             path.append(.createProfile)
@@ -305,9 +338,21 @@ struct OnboardingView: View {
 
     /// Final step — create band (if creating) or update profile (if joining), then enter the app
     private func finishOnboarding() async {
+#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+        onboardingAvailabilityPending = true
+        bandManager.configureOnboardingPreview(
+            name: bandManager.currentBand?.name ?? bandName,
+            userName: userName,
+            instrument: instrument.isEmpty ? nil : instrument,
+            location: practiceLocation.isEmpty ? nil : practiceLocation
+        )
+        path.append(.availability)
+        return
+#endif
         isSubmitting = true
         errorMessage = nil
         do {
+            onboardingAvailabilityPending = true
             if bandManager.currentBand == nil {
                 // Creating a new band
                 try await bandManager.createBand(
@@ -343,6 +388,7 @@ struct OnboardingView: View {
                     await bandManager.uploadAvatar(imageData: jpegData)
                 }
             }
+            path.append(.availability)
         } catch {
             errorMessage = error.localizedDescription
         }

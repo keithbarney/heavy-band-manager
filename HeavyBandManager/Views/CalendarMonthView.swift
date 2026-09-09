@@ -9,6 +9,7 @@ struct CalendarMonthView: View {
     @State private var isSyncing = false
     @State private var hasLoadedInitial = false
     @State private var showBandPicker = false
+    @State private var showAvailability = false
 
     private let calendar = Calendar.current
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
@@ -68,6 +69,10 @@ struct CalendarMonthView: View {
                 Divider().background(Color.themeBorder)
             }
             .background(Color.themeBg)
+
+            if bandManager.currentMember?.availabilitySetupComplete == false {
+                availabilitySetupCard
+            }
 
             if showUpcoming {
                 upcomingPracticesList
@@ -132,6 +137,13 @@ struct CalendarMonthView: View {
             BandPickerSheet()
                 .environmentObject(bandManager)
         }
+        .sheet(isPresented: $showAvailability) {
+            NavigationStack {
+                MyAvailabilityView()
+                    .environmentObject(bandManager)
+                    .environmentObject(calendarManager)
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
@@ -186,6 +198,36 @@ struct CalendarMonthView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         } // NavigationStack
+    }
+
+    private var availabilitySetupCard: some View {
+        Button {
+            showAvailability = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "person.crop.circle.badge.clock")
+                    .font(.title3)
+                    .foregroundStyle(Color.themeAccent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Add your usual practice times")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text("Help your band find times that work for you.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(12)
+            .background(Color.themeBgSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Current month start

@@ -3,6 +3,7 @@ import UIKit
 import UserNotifications
 
 struct BandTabs: View {
+    @EnvironmentObject var bandManager: BandManager
     @EnvironmentObject var calendarManager: CalendarManager
     @Environment(\.scenePhase) private var scenePhase
 
@@ -44,7 +45,7 @@ struct BandTabs: View {
                 Button("Cancel", role: .cancel) {}
             }
         } message: {
-            Text("Band Practice needs your calendar to find times when everyone is free. Without it, the app can't work.")
+            Text("Connect your calendar so scheduled practices are added automatically. Your availability method stays the same.")
         }
         .alert("Enable Notifications", isPresented: $showNotifPrompt) {
             Button(notifAuthStatus == .notDetermined ? "Continue" : "Open Settings") {

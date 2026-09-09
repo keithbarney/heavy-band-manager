@@ -116,6 +116,7 @@ enum BackgroundSyncManager {
 
         // Sync each membership
         for member in memberships {
+            guard member.availabilityMode == .calendar else { continue }
             let dayEvents = calendarEvents
             // Invert events to free slots
             var allSlots: [[String: AnyJSON]] = []

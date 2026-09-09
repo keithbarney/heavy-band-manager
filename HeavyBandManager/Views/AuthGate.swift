@@ -9,6 +9,9 @@ struct AuthGate: View {
 
     var body: some View {
         Group {
+#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+            OnboardingPreviewView()
+#else
             if SCREENSHOT_MODE {
                 BandTabs()
                     .onAppear { bandManager.loadMockData() }
@@ -22,6 +25,7 @@ struct AuthGate: View {
             } else {
                 LoginView()
             }
+#endif
         }
     }
 }

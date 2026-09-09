@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BandGate: View {
     @EnvironmentObject var bandManager: BandManager
+    @AppStorage("onboardingAvailabilityPending") private var onboardingAvailabilityPending = false
 
     var body: some View {
         Group {
@@ -9,7 +10,7 @@ struct BandGate: View {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color.themeBg)
-            } else if bandManager.currentBand == nil {
+            } else if bandManager.currentBand == nil || onboardingAvailabilityPending || bandManager.currentMember?.availabilitySetupComplete == false {
                 VStack {
                     if let error = bandManager.error {
                         Text("DEBUG: \(error)")

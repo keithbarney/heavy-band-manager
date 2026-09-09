@@ -25,6 +25,9 @@ struct BandManagerApp: App {
                         .environmentObject(toastManager)
                 }
                 .task {
+#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+                    calendarManager.initialize()
+#else
                     await authManager.initialize()
                     calendarManager.initialize()
                     bandManager.onMemberJoined = { name in
@@ -62,6 +65,7 @@ struct BandManagerApp: App {
                             )
                         }
                     }
+#endif
                 }
                 .onChange(of: authManager.user) { _, newUser in
                     if newUser != nil {

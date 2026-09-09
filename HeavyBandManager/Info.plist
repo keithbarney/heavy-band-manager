@@ -29,7 +29,7 @@
 	<key>UIRequiresFullScreen</key>
 	<true/>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Band Practice reads events from the calendars you choose to find practice times when every band member is free, and writes scheduled practices to a dedicated "Band Practice" calendar. For example, if your bandmates are all free Wednesday from 7–9pm, the app will mark that slot as available and add a calendar event once a practice is scheduled.</string>
+	<string>Band Practice adds scheduled practices to your calendar. With Automatic availability, it also checks events in the calendars you select to find free practice times. Manual availability uses your chosen weekly hours.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>UIBackgroundModes</key>

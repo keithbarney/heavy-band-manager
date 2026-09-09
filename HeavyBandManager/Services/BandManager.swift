@@ -7,6 +7,7 @@ final class BandManager: ObservableObject {
     @Published var currentBand: BandWithMembers?
     var members: [BandMember] { currentBand?.bandMembers ?? [] }
     @Published var slots: [AvailabilitySlot] = []
+    @Published var weeklyRules: [WeeklyAvailabilityRule] = []
     @Published var practices: [ScheduledPractice] = []
     @Published var isLoading = true
     @Published var error: String?
@@ -32,6 +33,9 @@ final class BandManager: ObservableObject {
     }
 
     private func currentUserId() throws -> UUID {
+#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+        return Self.onboardingPreviewUserId
+#endif
         guard let user = Config.supabase.auth.currentUser else {
             throw NSError(domain: "BandManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"])
         }
@@ -178,6 +182,7 @@ final class BandManager: ObservableObject {
 
         unsubscribeAllChannels()
         slots = []
+        weeklyRules = []
         practices = []
         authoritativePracticeBandId = nil
         authoritativePractices = []
@@ -195,6 +200,9 @@ final class BandManager: ObservableObject {
     }
 
     func loadSlots(from startDate: String? = nil, to endDate: String? = nil) async {
+#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+        return
+#endif
         if SCREENSHOT_MODE { return }
         guard let bandId = currentBand?.id else { return }
         do {
@@ -216,10 +224,155 @@ final class BandManager: ObservableObject {
         }
     }
 
+    func loadWeeklyRules() async {
+#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+        return
+#endif
+        guard let member = currentMember, let bandId = currentBand?.id else { return }
+        do {
+            weeklyRules = try await Config.supabase
+                .from("weekly_availability_rules")
+                .select()
+                .eq("member_id", value: member.id.uuidString)
+                .eq("band_id", value: bandId.uuidString)
+                .order("day_of_week")
+                .execute()
+                .value
+        } catch {
+            // The migration may not be deployed yet; existing calendar users can continue.
+            weeklyRules = []
+        }
+    }
+
+    /// Saves a member's recurring weekly hours and projects them into dated slots so the
+    /// existing overlap engine can serve both availability sources together.
+    func saveWeeklyAvailability(_ ranges: [Int: (start: Int, end: Int)]) async throws {
+        guard let member = currentMember, let bandId = currentBand?.id else {
+            throw NSError(domain: "BandManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Your band profile could not be loaded. Please try again."])
+        }
+        let validRanges = ranges.filter { (0...6).contains($0.key) && $0.value.start < $0.value.end }
+        guard !validRanges.isEmpty else {
+            throw NSError(domain: "BandManager", code: 422, userInfo: [NSLocalizedDescriptionKey: "Choose at least one day and time."])
+        }
+
+#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+        weeklyRules = validRanges.keys.sorted().map { day in
+            WeeklyAvailabilityRule(id: UUID(), memberId: member.id, bandId: bandId,
+                                   dayOfWeek: day, startMinutes: validRanges[day]!.start,
+                                   endMinutes: validRanges[day]!.end)
+        }
+        updateOnboardingPreviewAvailability(.weekly, complete: true)
+        projectOnboardingPreviewSlots()
+        return
+#endif
+
+        try await Config.supabase
+            .from("weekly_availability_rules")
+            .delete()
+            .eq("member_id", value: member.id.uuidString)
+            .eq("band_id", value: bandId.uuidString)
+            .execute()
+
+        let rows = validRanges.keys.sorted().compactMap { day -> [String: AnyJSON]? in
+            guard let range = validRanges[day] else { return nil }
+            return [
+                "member_id": .string(member.id.uuidString),
+                "band_id": .string(bandId.uuidString),
+                "day_of_week": .integer(day),
+                "start_minutes": .integer(range.start),
+                "end_minutes": .integer(range.end),
+            ]
+        }
+        try await Config.supabase
+            .from("weekly_availability_rules")
+            .insert(rows)
+            .execute()
+
+        try await projectWeeklySlots(ranges: validRanges, member: member, bandId: bandId)
+        try await Config.supabase
+            .from("band_members")
+            .update([
+                "availability_mode": AnyJSON.string(AvailabilityMode.weekly.rawValue),
+                "availability_setup_complete": AnyJSON.bool(true),
+            ])
+            .eq("id", value: member.id.uuidString)
+            .execute()
+        await reloadCurrentBandMembers()
+        await loadWeeklyRules()
+    }
+
+    func setAvailabilityMode(_ mode: AvailabilityMode) async throws {
+        guard let member = currentMember else {
+            throw NSError(domain: "BandManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Your band profile could not be loaded. Please try again."])
+        }
+#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+        updateOnboardingPreviewAvailability(mode, complete: true)
+        return
+#endif
+        try await Config.supabase
+            .from("band_members")
+            .update([
+                "availability_mode": AnyJSON.string(mode.rawValue),
+                "availability_setup_complete": AnyJSON.bool(true),
+            ])
+            .eq("id", value: member.id.uuidString)
+            .execute()
+        await reloadCurrentBandMembers()
+    }
+
+    private func projectWeeklySlots(
+        ranges: [Int: (start: Int, end: Int)],
+        member: BandMember,
+        bandId: UUID
+    ) async throws {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: Date())
+        let end = calendar.date(byAdding: .month, value: 6, to: start)!
+        let startString = TimeHelpers.dateString(from: start)
+        let endString = TimeHelpers.dateString(from: end)
+
+        try await Config.supabase
+            .from("availability_slots")
+            .delete()
+            .eq("member_id", value: member.id.uuidString)
+            .eq("band_id", value: bandId.uuidString)
+            .gte("date", value: startString)
+            .lte("date", value: endString)
+            .execute()
+
+        var rows: [[String: AnyJSON]] = []
+        var date = start
+        while date < end {
+            let weekday = calendar.component(.weekday, from: date) - 1
+            if let range = ranges[weekday] {
+                rows.append([
+                    "member_id": .string(member.id.uuidString),
+                    "band_id": .string(bandId.uuidString),
+                    "date": .string(TimeHelpers.dateString(from: date)),
+                    "start_minutes": .integer(range.start),
+                    "end_minutes": .integer(range.end),
+                    "confirmed": .bool(true),
+                ])
+            }
+            date = calendar.date(byAdding: .day, value: 1, to: date)!
+        }
+
+        if !rows.isEmpty {
+            try await Config.supabase
+                .from("availability_slots")
+                .insert(rows)
+                .execute()
+        }
+        await loadSlots(from: startString, to: endString)
+    }
+
     /// Returns true only for a successful, unfiltered snapshot of the band that
     /// is still selected when the request completes.
     @discardableResult
     func loadPractices(from startDate: String? = nil, to endDate: String? = nil) async -> Bool {
+#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+        return false
+#endif
         if SCREENSHOT_MODE { return false }
         guard let bandId = currentBand?.id else { return false }
         let requestId = UUID()
@@ -436,6 +589,7 @@ final class BandManager: ObservableObject {
 
     func syncCalendar(calendarManager: CalendarManager, from startDate: Date, to endDate: Date) async {
         guard let member = currentMember, let bandId = currentBand?.id else { return }
+        guard member.availabilityMode == .calendar else { return }
 
         let events = calendarManager.getEvents(from: startDate, to: endDate)
         let newSlots = calendarManager.invertEventsToSlots(
@@ -446,6 +600,16 @@ final class BandManager: ObservableObject {
             windowEnd: member.practiceWindowEnd,
             memberId: member.id
         )
+
+#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+        slots = newSlots.map {
+            AvailabilitySlot(id: UUID(), memberId: member.id, bandId: bandId,
+                             date: $0.date, startMinutes: $0.startMinutes,
+                             endMinutes: $0.endMinutes, confirmed: true)
+        }
+        calendarManager.lastSyncDate = Date()
+        return
+#endif
 
         let startStr = TimeHelpers.dateString(from: startDate)
         let endStr = TimeHelpers.dateString(from: endDate)
@@ -645,6 +809,7 @@ final class BandManager: ObservableObject {
         bands = []
         currentBand = nil
         slots = []
+        weeklyRules = []
         practices = []
         authoritativePracticeBandId = nil
         authoritativePractices = []

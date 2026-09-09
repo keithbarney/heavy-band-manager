@@ -9,8 +9,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    MARKETING_VERSION: "1.2.0"
-    CURRENT_PROJECT_VERSION: 7
+    MARKETING_VERSION: "1.3.0"
+    CURRENT_PROJECT_VERSION: 8
     DEVELOPMENT_TEAM: BXKNJTU253
     CODE_SIGN_STYLE: Automatic
     TARGETED_DEVICE_FAMILY: "1"
@@ -43,6 +43,7 @@ targets:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.keithbarney.heavybandmanager.local
           BUNDLE_DISPLAY_NAME: Band Practice (L)
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) $(ONBOARDING_PREVIEW_CONDITION)"
         Release:
           PRODUCT_BUNDLE_IDENTIFIER: com.keithbarney.heavybandmanager
           BUNDLE_DISPLAY_NAME: Band Practice

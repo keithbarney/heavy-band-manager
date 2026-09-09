@@ -437,6 +437,24 @@ struct CalendarPrefs: Codable {
     let calendarColorHex: String?
     let calendarIdentifier: String?
     let practiceEventRegistry: PracticeEventRegistry?
+
+    init(
+        selectedCalendarIds: [String],
+        lastSyncDate: Date?,
+        calendarName: String?,
+        autoSync: Bool?,
+        calendarColorHex: String?,
+        calendarIdentifier: String?,
+        practiceEventRegistry: PracticeEventRegistry?
+    ) {
+        self.selectedCalendarIds = selectedCalendarIds
+        self.lastSyncDate = lastSyncDate
+        self.calendarName = calendarName
+        self.autoSync = autoSync
+        self.calendarColorHex = calendarColorHex
+        self.calendarIdentifier = calendarIdentifier
+        self.practiceEventRegistry = practiceEventRegistry
+    }
 }
 
 // MARK: - Color Hex Codec

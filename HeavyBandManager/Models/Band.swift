@@ -37,6 +37,8 @@ struct BandMember: Identifiable, Codable {
     let practiceWindowStart: Int
     let practiceWindowEnd: Int
     let avatarUrl: String?
+    let availabilityMode: AvailabilityMode
+    let availabilitySetupComplete: Bool
     let joinedAt: Date
 
     enum CodingKeys: String, CodingKey {
@@ -46,7 +48,78 @@ struct BandMember: Identifiable, Codable {
         case practiceWindowStart = "practice_window_start"
         case practiceWindowEnd = "practice_window_end"
         case avatarUrl = "avatar_url"
+        case availabilityMode = "availability_mode"
+        case availabilitySetupComplete = "availability_setup_complete"
         case joinedAt = "joined_at"
+    }
+
+    init(
+        id: UUID,
+        bandId: UUID,
+        userId: UUID,
+        name: String,
+        instrument: String?,
+        color: String,
+        practiceWindowStart: Int,
+        practiceWindowEnd: Int,
+        avatarUrl: String?,
+        availabilityMode: AvailabilityMode = .calendar,
+        availabilitySetupComplete: Bool = true,
+        joinedAt: Date
+    ) {
+        self.id = id
+        self.bandId = bandId
+        self.userId = userId
+        self.name = name
+        self.instrument = instrument
+        self.color = color
+        self.practiceWindowStart = practiceWindowStart
+        self.practiceWindowEnd = practiceWindowEnd
+        self.avatarUrl = avatarUrl
+        self.availabilityMode = availabilityMode
+        self.availabilitySetupComplete = availabilitySetupComplete
+        self.joinedAt = joinedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        bandId = try container.decode(UUID.self, forKey: .bandId)
+        userId = try container.decode(UUID.self, forKey: .userId)
+        name = try container.decode(String.self, forKey: .name)
+        instrument = try container.decodeIfPresent(String.self, forKey: .instrument)
+        color = try container.decode(String.self, forKey: .color)
+        practiceWindowStart = try container.decodeIfPresent(Int.self, forKey: .practiceWindowStart) ?? 960
+        practiceWindowEnd = try container.decodeIfPresent(Int.self, forKey: .practiceWindowEnd) ?? 1380
+        avatarUrl = try container.decodeIfPresent(String.self, forKey: .avatarUrl)
+        availabilityMode = try container.decodeIfPresent(AvailabilityMode.self, forKey: .availabilityMode) ?? .calendar
+        availabilitySetupComplete = try container.decodeIfPresent(Bool.self, forKey: .availabilitySetupComplete) ?? true
+        joinedAt = try container.decodeIfPresent(Date.self, forKey: .joinedAt) ?? Date()
+    }
+}
+
+enum AvailabilityMode: String, Codable, CaseIterable, Identifiable {
+    case weekly
+    case calendar
+
+    var id: String { rawValue }
+}
+
+struct WeeklyAvailabilityRule: Identifiable, Codable, Hashable {
+    let id: UUID
+    let memberId: UUID
+    let bandId: UUID
+    let dayOfWeek: Int
+    let startMinutes: Int
+    let endMinutes: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case memberId = "member_id"
+        case bandId = "band_id"
+        case dayOfWeek = "day_of_week"
+        case startMinutes = "start_minutes"
+        case endMinutes = "end_minutes"
     }
 }
 

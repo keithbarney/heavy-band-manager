@@ -136,7 +136,11 @@ struct DayDetailSheet: View {
                 Text(member.name)
                     .font(.body)
 
-                if memberSlots.isEmpty {
+                if !member.availabilitySetupComplete {
+                    Text("Availability not set")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                } else if memberSlots.isEmpty {
                     Text("Not available")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
