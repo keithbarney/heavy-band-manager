@@ -350,7 +350,7 @@ archive() {
     -archivePath "$ARCHIVE_PATH" \
     -allowProvisioningUpdates \
     -onlyUsePackageVersionsFromResolvedFile \
-    "${auth_args[@]}"
+    ${auth_args[@]+"${auth_args[@]}"}
 
   git -C "$ROOT_DIR" rev-parse HEAD > "$ARCHIVE_SOURCE_COMMIT"
 
@@ -377,7 +377,7 @@ upload() {
     -exportOptionsPlist "$EXPORT_OPTIONS" \
     -exportPath "$RELEASE_DIR/Export" \
     -allowProvisioningUpdates \
-    "${auth_args[@]}"
+    ${auth_args[@]+"${auth_args[@]}"}
 
   echo "Upload accepted by App Store Connect. Wait for processing before TestFlight validation."
 }
