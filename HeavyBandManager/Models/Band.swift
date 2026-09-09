@@ -123,7 +123,7 @@ struct WeeklyAvailabilityRule: Identifiable, Codable, Hashable {
     }
 }
 
-struct AvailabilitySlot: Identifiable, Codable {
+struct AvailabilitySlot: Identifiable, Codable, Equatable {
     let id: UUID
     let memberId: UUID
     let bandId: UUID

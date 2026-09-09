@@ -7,21 +7,39 @@ struct BandTabs: View {
     @EnvironmentObject var calendarManager: CalendarManager
     @Environment(\.scenePhase) private var scenePhase
 
+    @EnvironmentObject private var toastManager: ToastManager
+    @State private var selectedTab: Int
+
+    init(initialTab: Int = 0) {
+        _selectedTab = State(initialValue: initialTab)
+    }
+
     @State private var showCalendarPrompt = false
     @State private var showNotifPrompt = false
     @State private var notifAuthStatus: UNAuthorizationStatus = .notDetermined
 
     var body: some View {
-        TabView {
-            CalendarMonthView()
+        TabView(selection: $selectedTab) {
+            CalendarMonthView(onOpenAvailability: { selectedTab = 1 })
                 .tabItem {
                     Label("Calendar", systemImage: "calendar")
                 }
+                .tag(0)
 
-            SettingsView()
+            NavigationStack {
+                MyAvailabilityView(onFinished: {
+                    toastManager.show("Availability saved", type: .success)
+                })
+            }
+            .id(bandManager.currentBand?.id)
+            .tabItem { Label("Availability", systemImage: "person.crop.circle.badge.clock") }
+            .tag(1)
+
+            SettingsView(onOpenAvailability: { selectedTab = 1 })
                 .tabItem {
                     Label("Settings", systemImage: "gearshape")
                 }
+                .tag(2)
         }
         .tint(Color.themeAccent)
         .task { await checkPermissions() }
@@ -67,6 +85,9 @@ struct BandTabs: View {
     }
 
     private func checkPermissions() async {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        return
+#else
         calendarManager.checkAuthorization()
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         notifAuthStatus = settings.authorizationStatus
@@ -77,5 +98,6 @@ struct BandTabs: View {
         } else if !notifAuthorized {
             if !showNotifPrompt { showNotifPrompt = true }
         }
+#endif
     }
 }

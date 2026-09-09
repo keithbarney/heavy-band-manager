@@ -5,6 +5,7 @@ import UserNotifications
 
 struct SettingsView: View {
     var startsAtAvailability = false
+    var onOpenAvailability: (() -> Void)? = nil
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var bandManager: BandManager
     @EnvironmentObject var calendarManager: CalendarManager
@@ -158,18 +159,13 @@ struct SettingsView: View {
 
                     // MARK: - Availability
                     Section {
-                        NavigationLink {
-                            MyAvailabilityView()
-                                .environmentObject(bandManager)
-                                .environmentObject(calendarManager)
-                        } label: {
-                            HStack {
-                                Label("My Availability", systemImage: "person.crop.circle.badge.clock")
-                                Spacer()
-                                Text(availabilitySummary)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
+                        if let onOpenAvailability {
+                            Button(action: onOpenAvailability) { availabilityLinkLabel }
+                                .foregroundStyle(.primary)
+                        } else {
+                            NavigationLink {
+                                MyAvailabilityView()
+                            } label: { availabilityLinkLabel }
                         }
                     } footer: {
                         Text(bandManager.currentMember?.availabilityMode == .weekly
@@ -469,6 +465,14 @@ struct SettingsView: View {
         }
     }
 
+    private var availabilityLinkLabel: some View {
+        HStack {
+            Label("My Availability", systemImage: "person.crop.circle.badge.clock")
+            Spacer()
+            Text(availabilitySummary).foregroundStyle(.secondary).lineLimit(1)
+        }
+    }
+
     private var availabilitySummary: String {
         guard let member = bandManager.currentMember else { return "Set up" }
         guard member.availabilitySetupComplete else { return "Set up" }
@@ -488,6 +492,10 @@ struct SettingsView: View {
     }
 
     private func handleNotificationTap() {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        calendarManager.previewNotificationsAuthorized.toggle()
+        notificationStatus = calendarManager.previewNotificationsAuthorized ? .authorized : .denied
+#else
         switch notificationPermissionState {
         case .granted, .denied:
             openSettings()
@@ -497,16 +505,25 @@ struct SettingsView: View {
                 await refreshNotificationStatus()
             }
         }
+#endif
     }
 
     private func refreshNotificationStatus() async {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        notificationStatus = calendarManager.previewNotificationsAuthorized ? .authorized : .notDetermined
+#else
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         await MainActor.run { notificationStatus = settings.authorizationStatus }
+#endif
     }
 
     private func openSettings() {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        toastManager.show("Device settings are simulated in this mock review")
+#else
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
+#endif
     }
 
     // MARK: - Member Band Row

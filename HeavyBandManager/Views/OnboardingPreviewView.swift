@@ -1,4 +1,4 @@
-#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+#if DEBUG && targetEnvironment(simulator) && (ONBOARDING_PREVIEW || AVAILABILITY_TAB_PREVIEW)
 import SwiftUI
 
 /// Enabled only for the separately identified simulator onboarding build.
@@ -110,7 +110,7 @@ extension BandManager {
             defaultPracticeLocation: band.defaultPracticeLocation, inviteCode: band.inviteCode,
             logoUrl: band.logoUrl, createdAt: band.createdAt,
             minPracticeMinutes: band.minPracticeMinutes, maxPracticeMinutes: band.maxPracticeMinutes,
-            minMembersRequired: band.minMembersRequired, bandMembers: [updatedMember]
+            minMembersRequired: band.minMembersRequired, bandMembers: band.bandMembers.map { $0.id == updatedMember.id ? updatedMember : $0 }
         )
         currentBand = updatedBand
         bands = [updatedBand]
@@ -121,7 +121,7 @@ extension BandManager {
         let calendar = Calendar.current
         var day = calendar.startOfDay(for: Date())
         let end = calendar.date(byAdding: .month, value: 6, to: day)!
-        slots = []
+        slots.removeAll { $0.memberId == member.id }
         while day < end {
             for rule in weeklyRules where rule.dayOfWeek == calendar.component(.weekday, from: day) - 1 {
                 slots.append(AvailabilitySlot(

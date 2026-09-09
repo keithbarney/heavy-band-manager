@@ -13,6 +13,18 @@ final class CalendarManager: ObservableObject {
     @Published var practiceCalendarColor: Color = .blue
     @Published var autoSync = true
 
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+    @Published var previewAuthorizationStatus: EKAuthorizationStatus = .fullAccess
+    @Published var previewPermissionPrompt = false
+    var previewNotificationsAuthorized = false
+
+    func setPreviewAuthorization(_ status: EKAuthorizationStatus) {
+        previewAuthorizationStatus = status
+        previewPermissionPrompt = false
+        checkAuthorization()
+    }
+#endif
+
     private var practiceCalendarIdentifier: String?
     private var practiceEventRegistry = PracticeEventRegistry()
     private let store = EKEventStore()
@@ -28,22 +40,37 @@ final class CalendarManager: ObservableObject {
     // MARK: - Initialize
 
     func initialize() {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        checkAuthorization()
+#else
         loadPrefs()
         checkAuthorization()
+#endif
     }
 
     // MARK: - Authorization
 
     func checkAuthorization() {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        authStatus = previewAuthorizationStatus
+        isAuthorized = authStatus == .fullAccess
+        loadDeviceCalendars()
+        return
+#else
         let status = EKEventStore.authorizationStatus(for: .event)
         authStatus = status
         isAuthorized = status == .fullAccess || status == .authorized
         if isAuthorized {
             loadDeviceCalendars()
         }
+#endif
     }
 
     func requestAccess() async {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        previewPermissionPrompt = true
+        return
+#else
         do {
             let granted = try await store.requestFullAccessToEvents()
             isAuthorized = granted
@@ -55,11 +82,19 @@ final class CalendarManager: ObservableObject {
             print("Calendar access error: \(error)")
             authStatus = EKEventStore.authorizationStatus(for: .event)
         }
+#endif
     }
 
     // MARK: - Device Calendars
 
     func loadDeviceCalendars() {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        guard isAuthorized else { deviceCalendars = []; return }
+        deviceCalendars = ["Personal", "Work", "Band Practice"].map {
+            DeviceCalendar(id: "mock-" + $0, title: $0, color: UIColor.systemBlue.cgColor, source: "Mock calendar")
+        }
+        if selectedCalendarIds.isEmpty { selectedCalendarIds = ["mock-Personal", "mock-Work"] }
+#else
         let calendars = store.calendars(for: .event)
         deviceCalendars = calendars
             .filter { $0.allowsContentModifications || $0.type == .calDAV || $0.type == .local }
@@ -77,6 +112,7 @@ final class CalendarManager: ObservableObject {
             selectedCalendarIds = Set(deviceCalendars.map(\.id))
             savePrefs()
         }
+#endif
     }
 
     func toggleCalendar(_ id: String) {
@@ -91,6 +127,19 @@ final class CalendarManager: ObservableObject {
     // MARK: - Read Events for Date Range
 
     func getEvents(from startDate: Date, to endDate: Date) -> [CalendarEvent] {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        guard isAuthorized, selectedCalendarIds.contains("mock-Work") else { return [] }
+        var events: [CalendarEvent] = []
+        var day = Calendar.current.startOfDay(for: startDate)
+        while day < endDate {
+            if (2...6).contains(Calendar.current.component(.weekday, from: day)) {
+                events.append(CalendarEvent(date: TimeHelpers.dateString(from: day), startMinutes: 540, endMinutes: 1020,
+                    title: "Mock work hours", color: UIColor.systemBlue.cgColor))
+            }
+            day = Calendar.current.date(byAdding: .day, value: 1, to: day)!
+        }
+        return events
+#else
         let ekCalendars = store.calendars(for: .event).filter { selectedCalendarIds.contains($0.calendarIdentifier) }
         guard !ekCalendars.isEmpty else { return [] }
 
@@ -134,6 +183,7 @@ final class CalendarManager: ObservableObject {
         }
 
         return calendarEvents
+#endif
     }
 
     // MARK: - Invert Events to Free Slots
@@ -190,6 +240,11 @@ final class CalendarManager: ObservableObject {
     // MARK: - Write Practice Events
 
     func getOrCreateBandCalendar(bandName: String? = nil) throws -> EKCalendar {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        let calendar = EKCalendar(for: .event, eventStore: store)
+        calendar.title = practiceCalendarName
+        return calendar
+#else
         // Look up by stored identifier first (survives renames)
         if let id = practiceCalendarIdentifier,
            let existing = store.calendar(withIdentifier: id) {
@@ -224,10 +279,15 @@ final class CalendarManager: ObservableObject {
         practiceCalendarIdentifier = calendar.calendarIdentifier
         savePrefs()
         return calendar
+#endif
     }
 
     /// Renames the synced practice calendar in EventKit and persists the new name.
     func renameCalendar(to newName: String) {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { practiceCalendarName = name }
+#else
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         practiceCalendarName = trimmed
@@ -237,10 +297,14 @@ final class CalendarManager: ObservableObject {
             try? store.saveCalendar(cal, commit: true)
         }
         savePrefs()
+#endif
     }
 
     /// Updates the synced practice calendar's color in EventKit and persists it.
     func recolorCalendar(_ color: Color) {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        practiceCalendarColor = color
+#else
         practiceCalendarColor = color
         if let id = practiceCalendarIdentifier,
            let cal = store.calendar(withIdentifier: id) {
@@ -248,6 +312,7 @@ final class CalendarManager: ObservableObject {
             try? store.saveCalendar(cal, commit: true)
         }
         savePrefs()
+#endif
     }
 
     /// Creates this device's Apple Calendar event for a scheduled practice.
@@ -262,6 +327,9 @@ final class CalendarManager: ObservableObject {
         bandName: String,
         location: String?
     ) async throws -> String {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        return "mock-" + practiceId.uuidString
+#else
         if !isAuthorized {
             await requestAccess()
         }
@@ -311,10 +379,14 @@ final class CalendarManager: ObservableObject {
         practiceEventRegistry.record(identifier, for: practiceId, bandId: bandId)
         savePrefs()
         return identifier
+#endif
     }
 
     /// Deletes this device's Apple Calendar event for a shared practice.
     func deletePracticeEvent(practiceId: UUID) async throws {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        return
+#else
         let currentStatus = EKEventStore.authorizationStatus(for: .event)
         guard currentStatus == .fullAccess || currentStatus == .authorized else {
             authStatus = currentStatus
@@ -327,6 +399,7 @@ final class CalendarManager: ObservableObject {
         }
         practiceEventRegistry.removeIdentifier(for: practiceId)
         savePrefs()
+#endif
     }
 
     /// Removes calendar events whose shared practices no longer exist in a fully
@@ -373,6 +446,9 @@ final class CalendarManager: ObservableObject {
     // MARK: - Persistence
 
     private func loadPrefs() {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        return
+#else
         guard let data = UserDefaults.standard.data(forKey: prefsKey),
               let prefs = try? JSONDecoder().decode(CalendarPrefs.self, from: data) else { return }
         selectedCalendarIds = Set(prefs.selectedCalendarIds)
@@ -386,9 +462,13 @@ final class CalendarManager: ObservableObject {
         if let hex = prefs.calendarColorHex, !hex.isEmpty {
             practiceCalendarColor = Color(hex: hex)
         }
+#endif
     }
 
     func savePrefs() {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        return
+#else
         let prefs = CalendarPrefs(
             selectedCalendarIds: Array(selectedCalendarIds),
             lastSyncDate: lastSyncDate,
@@ -404,6 +484,7 @@ final class CalendarManager: ObservableObject {
         if let lastSyncDate {
             UserDefaults.standard.set(lastSyncDate, forKey: CalendarPreferenceKeys.lastSyncDate)
         }
+#endif
     }
 }
 

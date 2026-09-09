@@ -14,7 +14,13 @@ struct BandManagerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            AuthGate()
+            Group {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+                AvailabilityTabPreviewView()
+#else
+                AuthGate()
+#endif
+            }
                 .environmentObject(authManager)
                 .environmentObject(bandManager)
                 .environmentObject(calendarManager)
@@ -25,7 +31,7 @@ struct BandManagerApp: App {
                         .environmentObject(toastManager)
                 }
                 .task {
-#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+#if DEBUG && targetEnvironment(simulator) && (ONBOARDING_PREVIEW || AVAILABILITY_TAB_PREVIEW)
                     calendarManager.initialize()
 #else
                     await authManager.initialize()
@@ -100,7 +106,9 @@ struct BandManagerApp: App {
     }
 
     init() {
+#if !(DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW)
         BackgroundSyncManager.register()
+#endif
 
         // One-time migration: reset appearance to system default
         if UserDefaults.standard.string(forKey: "appearanceMigrated") == nil {

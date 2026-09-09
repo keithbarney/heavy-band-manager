@@ -2,6 +2,10 @@ import Foundation
 import Supabase
 
 enum Config {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+    // Hard isolation: even unhandled actions cannot reach a production backend.
+    static let supabase = SupabaseClient(supabaseURL: URL(string: "http://127.0.0.1:1")!, supabaseKey: "native-ui-preview")
+#else
     static let supabase = SupabaseClient(
         supabaseURL: URL(string: Secrets.supabaseURL)!,
         supabaseKey: Secrets.supabaseAnonKey,
@@ -11,6 +15,7 @@ enum Config {
             )
         )
     )
+#endif
 }
 
 /// Persists Supabase auth tokens in UserDefaults so sessions survive app restarts.

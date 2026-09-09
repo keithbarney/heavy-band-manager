@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct CalendarMonthView: View {
+    var onOpenAvailability: (() -> Void)? = nil
     @EnvironmentObject var bandManager: BandManager
     @EnvironmentObject var calendarManager: CalendarManager
 
@@ -118,7 +119,7 @@ struct CalendarMonthView: View {
                 refreshCache()
             }
         }
-        .onChange(of: bandManager.slots.count) { _, _ in
+        .onChange(of: bandManager.slots) { _, _ in
             refreshCache()
         }
         .onChange(of: bandManager.practices.count) { _, _ in
@@ -202,7 +203,8 @@ struct CalendarMonthView: View {
 
     private var availabilitySetupCard: some View {
         Button {
-            showAvailability = true
+            if let onOpenAvailability { onOpenAvailability() }
+            else { showAvailability = true }
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "person.crop.circle.badge.clock")

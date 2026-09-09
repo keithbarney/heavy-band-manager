@@ -11,6 +11,9 @@ final class BandManager: ObservableObject {
     @Published var practices: [ScheduledPractice] = []
     @Published var isLoading = true
     @Published var error: String?
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+    @Published var previewSaveFails = false
+#endif
 
     private var slotsChannel: RealtimeChannelV2?
     private var practicesChannel: RealtimeChannelV2?
@@ -33,13 +36,14 @@ final class BandManager: ObservableObject {
     }
 
     private func currentUserId() throws -> UUID {
-#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+#if DEBUG && targetEnvironment(simulator) && (ONBOARDING_PREVIEW || AVAILABILITY_TAB_PREVIEW)
         return Self.onboardingPreviewUserId
-#endif
+#else
         guard let user = Config.supabase.auth.currentUser else {
             throw NSError(domain: "BandManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"])
         }
         return user.id
+#endif
     }
 
     // MARK: - Last selected band persistence
@@ -200,9 +204,9 @@ final class BandManager: ObservableObject {
     }
 
     func loadSlots(from startDate: String? = nil, to endDate: String? = nil) async {
-#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+#if DEBUG && targetEnvironment(simulator) && (ONBOARDING_PREVIEW || AVAILABILITY_TAB_PREVIEW)
         return
-#endif
+#else
         if SCREENSHOT_MODE { return }
         guard let bandId = currentBand?.id else { return }
         do {
@@ -222,12 +226,13 @@ final class BandManager: ObservableObject {
         } catch {
             self.error = error.localizedDescription
         }
+#endif
     }
 
     func loadWeeklyRules() async {
-#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+#if DEBUG && targetEnvironment(simulator) && (ONBOARDING_PREVIEW || AVAILABILITY_TAB_PREVIEW)
         return
-#endif
+#else
         guard let member = currentMember, let bandId = currentBand?.id else { return }
         do {
             weeklyRules = try await Config.supabase
@@ -242,11 +247,17 @@ final class BandManager: ObservableObject {
             // The migration may not be deployed yet; existing calendar users can continue.
             weeklyRules = []
         }
+#endif
     }
 
     /// Saves a member's recurring weekly hours and projects them into dated slots so the
     /// existing overlap engine can serve both availability sources together.
     func saveWeeklyAvailability(_ ranges: [Int: (start: Int, end: Int)]) async throws {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        if previewSaveFails {
+            throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Simulated save failure. Your changes are kept. Turn off Simulate failed save to retry."])
+        }
+#endif
         guard let member = currentMember, let bandId = currentBand?.id else {
             throw NSError(domain: "BandManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Your band profile could not be loaded. Please try again."])
         }
@@ -255,7 +266,7 @@ final class BandManager: ObservableObject {
             throw NSError(domain: "BandManager", code: 422, userInfo: [NSLocalizedDescriptionKey: "Choose at least one day and time."])
         }
 
-#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+#if DEBUG && targetEnvironment(simulator) && (ONBOARDING_PREVIEW || AVAILABILITY_TAB_PREVIEW)
         weeklyRules = validRanges.keys.sorted().map { day in
             WeeklyAvailabilityRule(id: UUID(), memberId: member.id, bandId: bandId,
                                    dayOfWeek: day, startMinutes: validRanges[day]!.start,
@@ -264,7 +275,7 @@ final class BandManager: ObservableObject {
         updateOnboardingPreviewAvailability(.weekly, complete: true)
         projectOnboardingPreviewSlots()
         return
-#endif
+#else
 
         try await Config.supabase
             .from("weekly_availability_rules")
@@ -299,16 +310,22 @@ final class BandManager: ObservableObject {
             .execute()
         await reloadCurrentBandMembers()
         await loadWeeklyRules()
+#endif
     }
 
     func setAvailabilityMode(_ mode: AvailabilityMode) async throws {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        if previewSaveFails {
+            throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Simulated save failure. Your changes are kept. Turn off Simulate failed save to retry."])
+        }
+#endif
         guard let member = currentMember else {
             throw NSError(domain: "BandManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Your band profile could not be loaded. Please try again."])
         }
-#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+#if DEBUG && targetEnvironment(simulator) && (ONBOARDING_PREVIEW || AVAILABILITY_TAB_PREVIEW)
         updateOnboardingPreviewAvailability(mode, complete: true)
         return
-#endif
+#else
         try await Config.supabase
             .from("band_members")
             .update([
@@ -318,6 +335,7 @@ final class BandManager: ObservableObject {
             .eq("id", value: member.id.uuidString)
             .execute()
         await reloadCurrentBandMembers()
+#endif
     }
 
     private func projectWeeklySlots(
@@ -370,9 +388,9 @@ final class BandManager: ObservableObject {
     /// is still selected when the request completes.
     @discardableResult
     func loadPractices(from startDate: String? = nil, to endDate: String? = nil) async -> Bool {
-#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
+#if DEBUG && targetEnvironment(simulator) && (ONBOARDING_PREVIEW || AVAILABILITY_TAB_PREVIEW)
         return false
-#endif
+#else
         if SCREENSHOT_MODE { return false }
         guard let bandId = currentBand?.id else { return false }
         let requestId = UUID()
@@ -417,6 +435,7 @@ final class BandManager: ObservableObject {
             }
             return false
         }
+#endif
     }
 
     // MARK: - Create Band
@@ -480,6 +499,11 @@ final class BandManager: ObservableObject {
     // MARK: - Schedule Practice
 
     func schedulePractice(date: String, startMinutes: Int, endMinutes: Int, location: String?, calendarManager: CalendarManager? = nil) async {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        guard let bandId = currentBand?.id else { return }
+        practices.append(ScheduledPractice(id: UUID(), bandId: bandId, date: date, startMinutes: startMinutes, endMinutes: endMinutes, location: location, scheduledBy: Self.onboardingPreviewUserId, scheduledAt: Date(), calendarEventId: nil))
+        return
+#else
         guard let bandId = currentBand?.id else { return }
         let bandName = currentBand?.name ?? "Band"
         let userId = try? currentUserId()
@@ -522,9 +546,14 @@ final class BandManager: ObservableObject {
         } catch {
             self.error = error.localizedDescription
         }
+#endif
     }
 
     func cancelPractice(_ practiceId: UUID, calendarManager: CalendarManager? = nil) async {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        practices.removeAll { $0.id == practiceId }
+        return
+#else
         do {
             try await Config.supabase
                 .from("scheduled_practices")
@@ -538,6 +567,7 @@ final class BandManager: ObservableObject {
         } catch {
             self.error = error.localizedDescription
         }
+#endif
     }
 
     // MARK: - Calendar Sync for Existing Practices
@@ -548,6 +578,9 @@ final class BandManager: ObservableObject {
         calendarManager: CalendarManager,
         reconcileStaleEvents: Bool = false
     ) async {
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        return
+#else
         guard let band = currentBand else { return }
         guard calendarManager.isAuthorized else { return }
 
@@ -583,6 +616,7 @@ final class BandManager: ObservableObject {
                 print("Failed to sync calendar event for practice \(practice.id): \(error.localizedDescription)")
             }
         }
+#endif
     }
 
     // MARK: - Calendar Sync
@@ -601,15 +635,16 @@ final class BandManager: ObservableObject {
             memberId: member.id
         )
 
-#if DEBUG && targetEnvironment(simulator) && ONBOARDING_PREVIEW
-        slots = newSlots.map {
+#if DEBUG && targetEnvironment(simulator) && (ONBOARDING_PREVIEW || AVAILABILITY_TAB_PREVIEW)
+        slots.removeAll { $0.memberId == member.id }
+        slots += newSlots.map {
             AvailabilitySlot(id: UUID(), memberId: member.id, bandId: bandId,
                              date: $0.date, startMinutes: $0.startMinutes,
                              endMinutes: $0.endMinutes, confirmed: true)
         }
         calendarManager.lastSyncDate = Date()
         return
-#endif
+#else
 
         let startStr = TimeHelpers.dateString(from: startDate)
         let endStr = TimeHelpers.dateString(from: endDate)
@@ -650,6 +685,7 @@ final class BandManager: ObservableObject {
             self.error = error.localizedDescription
             print("Sync error: \(error)")
         }
+#endif
     }
 
     // MARK: - Overlap

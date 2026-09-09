@@ -43,7 +43,7 @@ targets:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.keithbarney.heavybandmanager.local
           BUNDLE_DISPLAY_NAME: Band Practice (L)
-          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) $(ONBOARDING_PREVIEW_CONDITION)"
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) $(ONBOARDING_PREVIEW_CONDITION) $(AVAILABILITY_TAB_PREVIEW_CONDITION)"
         Release:
           PRODUCT_BUNDLE_IDENTIFIER: com.keithbarney.heavybandmanager
           BUNDLE_DISPLAY_NAME: Band Practice
@@ -64,6 +64,9 @@ targets:
     dependencies:
       - target: HeavyBandManager
     settings:
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) $(AVAILABILITY_TAB_PREVIEW_CONDITION)"
       base:
         GENERATE_INFOPLIST_FILE: "YES"
 
