@@ -61,7 +61,7 @@ struct MyAvailabilityView: View {
         }
         .disabled(isSaving)
         .navigationTitle("Availability")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
         .navigationBarBackButtonHidden(isSaving)
         .toolbar {
             if !isOnboarding {

@@ -185,6 +185,7 @@ struct BandSettingsView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Band")
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Switch band", systemImage: "arrow.left.arrow.right") { showBandPicker = true }

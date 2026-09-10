@@ -55,3 +55,11 @@ Band and Band member mock scenarios enter the new tab as organizer and ordinary 
 Verification: 17 mock tests and 12 production tests passed; production unsigned Release preflight and signed phone build passed. In the installed mock simulator, Minimum Members was changed from three to two and retained after switching scenarios. Practice Duration and a member editor opened and returned; the band switcher opened and dismissed. The member scenario displayed a read-only band name and Leave Band, with organizer editing and scheduling controls hidden. Settings showed personal/app controls without band sections. The installed executable and debug library matched the tested build. Screenshot: `.release/availability-tab/screenshots/band-tab.png`.
 
 Band was left visible in the dedicated Band Practice — Native UI simulator using mock data. Direct bottom-tab clicks remain unavailable through the shared Simulator computer-use coordinate bridge; scenario entry points exercised the actual tab views. The normal-data development build was installed in place and launched on Keith’s iPhone as Band Practice (L), version 1.3.0 (8).
+
+## Large screen titles
+
+Availability, Band, and Settings explicitly use native large navigation titles. Availability previously forced a small inline title; its root now matches the other two tabs. Detail editors keep their inline navigation titles, and the calendar retains its existing large month heading. Native scroll-to-collapse behavior is preserved.
+
+Inspected [Crouton Settings](https://mobbin.com/screens/69e986b1-7335-474c-b3cc-ed92d463ab2b) and [CLEAR App Settings](https://mobbin.com/screens/d920fbc5-34cd-4507-8c3f-4701ee3c72c1) in Mobbin for the large, leading-aligned heading above settings content.
+
+Production preflight passed with 12 tests and an unsigned Release build. The installed mock build matched its source artifact; Availability showed its large title before and after opening and returning from Practice hours. Screenshot: `.release/availability-tab/screenshots/availability-large-title.png`. Availability remains visible in the dedicated mock simulator.

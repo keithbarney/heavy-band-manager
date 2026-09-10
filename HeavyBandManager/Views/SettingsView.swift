@@ -188,6 +188,7 @@ struct SettingsView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.large)
             .task {
                 await refreshNotificationStatus()
             }
