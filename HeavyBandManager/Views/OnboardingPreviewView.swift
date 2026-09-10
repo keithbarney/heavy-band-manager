@@ -14,8 +14,8 @@ struct OnboardingPreviewView: View {
             HStack {
                 Picker("Preview", selection: $preview) {
                     Text("Onboarding").tag("onboarding")
-                    Text("Settings: Manual").tag("manual")
-                    Text("Settings: Automatic").tag("automatic")
+                    Text("Availability: Manual").tag("manual")
+                    Text("Availability: Automatic").tag("automatic")
                 }
                 .pickerStyle(.menu)
                 .fixedSize(horizontal: true, vertical: false)
@@ -31,7 +31,7 @@ struct OnboardingPreviewView: View {
                 BandGate()
                     .id(runID)
             } else {
-                SettingsView(startsAtAvailability: true)
+                NavigationStack { MyAvailabilityView() }
                     .environmentObject(settingsCalendar)
             }
         }
@@ -96,12 +96,12 @@ extension BandManager {
         isLoading = false
     }
 
-    func updateOnboardingPreviewAvailability(_ mode: AvailabilityMode, complete: Bool) {
+    func updateOnboardingPreviewAvailability(_ mode: AvailabilityMode, complete: Bool, windowStart: Int? = nil, windowEnd: Int? = nil) {
         guard let band = currentBand, let member = currentMember else { return }
         let updatedMember = BandMember(
             id: member.id, bandId: member.bandId, userId: member.userId,
             name: member.name, instrument: member.instrument, color: member.color,
-            practiceWindowStart: member.practiceWindowStart, practiceWindowEnd: member.practiceWindowEnd,
+            practiceWindowStart: windowStart ?? member.practiceWindowStart, practiceWindowEnd: windowEnd ?? member.practiceWindowEnd,
             avatarUrl: member.avatarUrl, availabilityMode: mode,
             availabilitySetupComplete: complete, joinedAt: member.joinedAt
         )

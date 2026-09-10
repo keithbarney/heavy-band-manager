@@ -885,13 +885,23 @@ final class BandManager: ObservableObject {
     // MARK: - Practice Window
 
     func updatePracticeWindow(start: Int, end: Int) async throws {
+        guard start >= 0, end <= 1440, start < end else {
+            throw NSError(domain: "Availability", code: 422, userInfo: [NSLocalizedDescriptionKey: "Choose an end time after the start time."])
+        }
         guard let member = currentMember else { return }
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        if previewSaveFails {
+            throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Simulated save failure. Your changes are kept."])
+        }
+        updateOnboardingPreviewAvailability(member.availabilityMode, complete: member.availabilitySetupComplete, windowStart: start, windowEnd: end)
+#else
         try await Config.supabase
             .from("band_members")
             .update(["practice_window_start": AnyJSON.integer(start), "practice_window_end": AnyJSON.integer(end)])
             .eq("id", value: member.id.uuidString)
             .execute()
         await reloadCurrentBandMembers()
+#endif
     }
 
     func updateMemberName(_ name: String) async {

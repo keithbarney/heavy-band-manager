@@ -15,6 +15,8 @@ struct MyAvailabilityView: View {
     @State private var selectedDays: Set<Int> = []
     @State private var startMinutes = 1140
     @State private var endMinutes = 1320
+    @State private var windowStart = 960
+    @State private var windowEnd = 1380
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var didLoad = false
@@ -41,6 +43,8 @@ struct MyAvailabilityView: View {
 
             if selectedMode == .weekly {
                 weeklyEditor
+            } else if calendarManager.isAuthorized {
+                automaticPreferences
             }
 
             if let errorMessage {
@@ -92,6 +96,10 @@ struct MyAvailabilityView: View {
             if let member = bandManager.currentMember, member.availabilitySetupComplete {
                 selectedMode = member.availabilityMode
             }
+            if let member = bandManager.currentMember {
+                windowStart = member.practiceWindowStart
+                windowEnd = member.practiceWindowEnd
+            }
             await bandManager.loadWeeklyRules()
             if !bandManager.weeklyRules.isEmpty {
                 selectedDays = Set(bandManager.weeklyRules.map(\.dayOfWeek))
@@ -108,10 +116,78 @@ struct MyAvailabilityView: View {
         guard didLoad, !isSaving, calendarManager.isAuthorized else { return false }
         switch selectedMode {
         case .calendar:
-            return true
+            return windowStart < windowEnd && !calendarManager.selectedCalendarIds.isEmpty
         case .weekly:
             return !selectedDays.isEmpty && startMinutes < endMinutes
         }
+    }
+
+    private var automaticPreferences: some View {
+        Section {
+            NavigationLink {
+                calendarSourcesList
+            } label: {
+                LabeledContent("Calendars to check", value: "\(calendarManager.selectedCalendarIds.count) selected")
+            }
+            NavigationLink {
+                Form {
+                    Picker("Start", selection: $windowStart) {
+                        ForEach(times.filter { $0 < 1440 }, id: \.self) { minutes in
+                            Text(TimeHelpers.formatTime(minutes)).tag(minutes)
+                        }
+                    }
+                    Picker("End", selection: $windowEnd) {
+                        ForEach(times.filter { $0 > 0 }, id: \.self) { minutes in
+                            Text(TimeHelpers.formatTime(minutes)).tag(minutes)
+                        }
+                    }
+                    Section {
+                        Text("Only share free time within these hours each day. Return to Availability and tap Save to apply your changes.")
+                    }
+                    if windowStart >= windowEnd {
+                        Text("Choose an end time after the start time.").foregroundStyle(.red)
+                    }
+                }
+                .navigationTitle("Daily Practice Window")
+                .navigationBarTitleDisplayMode(.inline)
+            } label: {
+                LabeledContent("Daily practice window", value: "\(TimeHelpers.formatTime(windowStart)) – \(TimeHelpers.formatTime(windowEnd))")
+            }
+            Toggle("Refresh availability on open", isOn: $calendarManager.autoSync)
+                .onChange(of: calendarManager.autoSync) { _, _ in calendarManager.savePrefs() }
+            if calendarManager.selectedCalendarIds.isEmpty {
+                Text("Select at least one calendar to find your free time.").foregroundStyle(.red)
+            }
+            if windowStart >= windowEnd {
+                Text("Choose an end time after the start time.").foregroundStyle(.red)
+            }
+        } header: {
+            Text("Automatic availability")
+        } footer: {
+            Text("Calendar selection and automatic refresh are saved on this device immediately. Tap Save to update your band's availability using these calendars and hours.")
+        }
+    }
+
+    private var calendarSourcesList: some View {
+        List {
+            ForEach(calendarManager.deviceCalendars) { cal in
+                Button {
+                    calendarManager.toggleCalendar(cal.id)
+                } label: {
+                    HStack {
+                        Circle().fill(Color(cgColor: cal.color)).frame(width: 12, height: 12)
+                        Text(cal.title)
+                        Spacer()
+                        if calendarManager.selectedCalendarIds.contains(cal.id) {
+                            Image(systemName: "checkmark").foregroundStyle(.blue)
+                        }
+                    }
+                }
+                .foregroundStyle(.primary)
+            }
+        }
+        .navigationTitle("Calendars to Check")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private var weeklyEditor: some View {
@@ -229,6 +305,10 @@ struct MyAvailabilityView: View {
                 let ranges = Dictionary(uniqueKeysWithValues: selectedDays.map { ($0, (start: startMinutes, end: endMinutes)) })
                 try await bandManager.saveWeeklyAvailability(ranges)
             } else {
+                if let member = bandManager.currentMember,
+                   windowStart != member.practiceWindowStart || windowEnd != member.practiceWindowEnd {
+                    try await bandManager.updatePracticeWindow(start: windowStart, end: windowEnd)
+                }
                 try await bandManager.setAvailabilityMode(.calendar)
                 let calendar = Calendar.current
                 let start = calendar.startOfDay(for: Date())

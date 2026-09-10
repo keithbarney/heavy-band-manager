@@ -35,7 +35,7 @@ struct BandTabs: View {
             .tabItem { Label("Availability", systemImage: "person.crop.circle.badge.clock") }
             .tag(1)
 
-            SettingsView(onOpenAvailability: { selectedTab = 1 })
+            SettingsView()
                 .tabItem {
                     Label("Settings", systemImage: "gearshape")
                 }

@@ -4,15 +4,12 @@ import EventKit
 import UserNotifications
 
 struct SettingsView: View {
-    var startsAtAvailability = false
-    var onOpenAvailability: (() -> Void)? = nil
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var bandManager: BandManager
     @EnvironmentObject var calendarManager: CalendarManager
     @EnvironmentObject var toastManager: ToastManager
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @Environment(\.scenePhase) private var scenePhase
-    @State private var isSyncing = false
     @State private var isRefreshingPracticeEvents = false
     @State private var editingBandName = false
     @State private var bandNameText = ""
@@ -28,420 +25,353 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollViewReader { scrollProxy in
-                List {
-                    // MARK: - Profile
-                    Section {
-                        if let member = bandManager.currentMember {
-                            HStack(spacing: 12) {
-                                MemberAvatar(member: member, size: 56)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack(spacing: 4) {
-                                        Text(member.name).font(.headline)
-                                        if bandManager.isLeader {
-                                            Text("Organizer")
-                                                .font(.caption2.bold())
-                                                .foregroundColor(.orange)
-                                                .padding(.horizontal, 6)
-                                                .padding(.vertical, 2)
-                                                .background(Color.orange.opacity(0.15))
-                                                .clipShape(Capsule())
-                                        }
+            List {
+                // MARK: - Profile
+                Section {
+                    if let member = bandManager.currentMember {
+                        HStack(spacing: 12) {
+                            MemberAvatar(member: member, size: 56)
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Text(member.name).font(.headline)
+                                    if bandManager.isLeader {
+                                        Text("Organizer")
+                                            .font(.caption2.bold())
+                                            .foregroundColor(.orange)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color.orange.opacity(0.15))
+                                            .clipShape(Capsule())
                                     }
-                                    if let email = authManager.user?.email {
-                                        Text(email)
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                    }
+                                }
+                                if let email = authManager.user?.email {
+                                    Text(email)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }
-                    } header: {
-                        Text("Profile")
+                    }
+                } header: {
+                    Text("Profile")
+                }
+
+                // MARK: - Band
+                Section {
+                    if bandManager.isLeader {
+                        Button {
+                            bandNameText = bandManager.currentBand?.name ?? ""
+                            editingBandName = true
+                        } label: {
+                            HStack {
+                                Text("Name")
+                                Spacer()
+                                Text(bandManager.currentBand?.name ?? "—")
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .foregroundStyle(.primary)
+                    } else {
+                        LabeledContent("Name", value: bandManager.currentBand?.name ?? "—")
                     }
 
-                    // MARK: - Band
-                    Section {
-                        if bandManager.isLeader {
-                            Button {
-                                bandNameText = bandManager.currentBand?.name ?? ""
-                                editingBandName = true
-                            } label: {
-                                HStack {
-                                    Text("Name")
-                                    Spacer()
-                                    Text(bandManager.currentBand?.name ?? "—")
-                                        .foregroundStyle(.secondary)
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.tertiary)
-                                }
-                            }
-                            .foregroundStyle(.primary)
-                        } else {
-                            LabeledContent("Name", value: bandManager.currentBand?.name ?? "—")
-                        }
-
-                        if bandManager.isLeader {
-                            Button {
-                                showLogoPicker = true
-                            } label: {
-                                HStack {
-                                    Text("Logo")
-                                        .foregroundStyle(.primary)
-                                    Spacer()
-                                    if isUploadingLogo {
+                    if bandManager.isLeader {
+                        Button {
+                            showLogoPicker = true
+                        } label: {
+                            HStack {
+                                Text("Logo")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                if isUploadingLogo {
+                                    ProgressView()
+                                } else if let logoUrl = bandManager.currentBand?.logoUrl, let url = URL(string: logoUrl) {
+                                    AsyncImage(url: url) { image in
+                                        image.resizable().scaledToFill()
+                                    } placeholder: {
                                         ProgressView()
-                                    } else if let logoUrl = bandManager.currentBand?.logoUrl, let url = URL(string: logoUrl) {
-                                        AsyncImage(url: url) { image in
-                                            image.resizable().scaledToFill()
-                                        } placeholder: {
-                                            ProgressView()
-                                        }
-                                        .frame(width: 36, height: 36)
-                                        .clipShape(Circle())
-                                    } else {
-                                        Circle()
-                                            .fill(Color.themeAccent.opacity(0.2))
-                                            .frame(width: 36, height: 36)
-                                            .overlay(
-                                                Image(systemName: "camera")
-                                                    .font(.caption)
-                                                    .foregroundStyle(Color.themeAccent)
-                                            )
                                     }
+                                    .frame(width: 36, height: 36)
+                                    .clipShape(Circle())
+                                } else {
+                                    Circle()
+                                        .fill(Color.themeAccent.opacity(0.2))
+                                        .frame(width: 36, height: 36)
+                                        .overlay(
+                                            Image(systemName: "camera")
+                                                .font(.caption)
+                                                .foregroundStyle(Color.themeAccent)
+                                        )
                                 }
                             }
-                            .sheet(isPresented: $showLogoPicker) {
-                                ImageCropPicker(isPresented: $showLogoPicker) { image in
-                                    Task { await handleLogoImage(image) }
+                        }
+                        .sheet(isPresented: $showLogoPicker) {
+                            ImageCropPicker(isPresented: $showLogoPicker) { image in
+                                Task { await handleLogoImage(image) }
+                            }
+                        }
+                    }
+
+                    ForEach(bandManager.members) { member in
+                        NavigationLink {
+                            MemberEditView(member: member)
+                                .environmentObject(bandManager)
+                        } label: {
+                            memberBandRow(member)
+                        }
+                    }
+
+                    Button {
+                        UIPasteboard.general.string = bandManager.currentBand?.inviteCode
+                        toastManager.show("Invite code copied")
+                    } label: {
+                        HStack {
+                            Text("Invite Code")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Text(bandManager.currentBand?.inviteCode ?? "—")
+                                .font(.body.monospaced())
+                                .foregroundStyle(.secondary)
+                            Image(systemName: "doc.on.doc")
+                                .font(.caption)
+                                .foregroundStyle(.blue)
+                        }
+                    }
+
+                    if bandManager.isLeader, let band = bandManager.currentBand {
+                        InviteMembersButton(
+                            invitation: BandInvitation(
+                                bandName: band.name,
+                                inviteCode: band.inviteCode
+                            )
+                        )
+                    }
+                } header: {
+                    Text("Band")
+                }
+
+                // MARK: - Band scheduling
+                if bandManager.isLeader {
+                    Section("Band Settings") {
+                        NavigationLink {
+                            practiceDurationPicker
+                        } label: {
+                            LabeledContent("Practice Duration") {
+                                if let band = bandManager.currentBand {
+                                    Text("\(TimeHelpers.formatDuration(band.minPracticeMinutes)) – \(TimeHelpers.formatDuration(band.maxPracticeMinutes))")
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }
 
-                        ForEach(bandManager.members) { member in
-                            NavigationLink {
-                                MemberEditView(member: member)
-                                    .environmentObject(bandManager)
-                            } label: {
-                                memberBandRow(member)
+                        NavigationLink {
+                            minMembersPicker
+                        } label: {
+                            LabeledContent("Minimum Members") {
+                                if let band = bandManager.currentBand {
+                                    Text("\(band.minMembersRequired) of \(bandManager.members.count)")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // MARK: - Scheduled practices on the device calendar
+                Section {
+                    if calendarManager.isAuthorized {
+                        NavigationLink {
+                            EditCalendarView()
+                                .environmentObject(calendarManager)
+                        } label: {
+                            HStack {
+                                Text("Practice calendar")
+                                Spacer()
+                                Circle()
+                                    .fill(calendarManager.practiceCalendarColor)
+                                    .frame(width: 14, height: 14)
+                                Text(calendarManager.practiceCalendarName)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
                             }
                         }
 
                         Button {
-                            UIPasteboard.general.string = bandManager.currentBand?.inviteCode
-                            toastManager.show("Invite code copied")
-                        } label: {
-                            HStack {
-                                Text("Invite Code")
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                Text(bandManager.currentBand?.inviteCode ?? "—")
-                                    .font(.body.monospaced())
-                                    .foregroundStyle(.secondary)
-                                Image(systemName: "doc.on.doc")
-                                    .font(.caption)
-                                    .foregroundStyle(.blue)
-                            }
-                        }
-
-                        if bandManager.isLeader, let band = bandManager.currentBand {
-                            InviteMembersButton(
-                                invitation: BandInvitation(
-                                    bandName: band.name,
-                                    inviteCode: band.inviteCode
-                                )
-                            )
-                        }
-                    } header: {
-                        Text("Band")
-                    }
-
-                    // MARK: - Availability
-                    Section {
-                        if let onOpenAvailability {
-                            Button(action: onOpenAvailability) { availabilityLinkLabel }
-                                .foregroundStyle(.primary)
-                        } else {
-                            NavigationLink {
-                                MyAvailabilityView()
-                            } label: { availabilityLinkLabel }
-                        }
-                    } footer: {
-                        Text(bandManager.currentMember?.availabilityMode == .weekly
-                             ? "Your availability follows your chosen days and hours. Calendar events won’t change it."
-                             : "Your availability follows the free time in your calendar.")
-                    }
-                    .id("availability")
-
-                    // MARK: - Automatic availability
-                    if bandManager.currentMember?.availabilityMode == .calendar {
-                        Section {
-                            if calendarManager.isAuthorized {
-                                NavigationLink {
-                                    calendarSourcesList
-                                } label: {
-                                    LabeledContent("Calendars to check", value: "\(calendarManager.selectedCalendarIds.count) selected")
-                                }
-
-                                NavigationLink {
-                                    practiceWindowPicker
-                                } label: {
-                                    LabeledContent("Practice Window") {
-                                        if let member = bandManager.currentMember {
-                                            Text("\(TimeHelpers.formatTime(member.practiceWindowStart)) – \(TimeHelpers.formatTime(member.practiceWindowEnd))")
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                }
-
-                                Toggle("Refresh availability on open", isOn: $calendarManager.autoSync)
-                                    .onChange(of: calendarManager.autoSync) { _, _ in
-                                        calendarManager.savePrefs()
-                                    }
-
-                                Button {
-                                    Task { await syncCalendar() }
-                                } label: {
-                                    Label("Refresh availability", systemImage: "arrow.triangle.2.circlepath")
-                                }
-                                .disabled(isSyncing)
-                            } else {
-                                Button(action: handleCalendarTap) {
-                                    Label("Connect my calendar", systemImage: "calendar")
-                                }
-                            }
-                        } header: {
-                            Text("Automatic availability")
-                        } footer: {
-                            Text("Find free time around events in your selected calendars.")
-                        }
-                    }
-
-                    // MARK: - Band scheduling
-                    if bandManager.isLeader {
-                        Section("Band Settings") {
-                            NavigationLink {
-                                practiceDurationPicker
-                            } label: {
-                                LabeledContent("Practice Duration") {
-                                    if let band = bandManager.currentBand {
-                                        Text("\(TimeHelpers.formatDuration(band.minPracticeMinutes)) – \(TimeHelpers.formatDuration(band.maxPracticeMinutes))")
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-
-                            NavigationLink {
-                                minMembersPicker
-                            } label: {
-                                LabeledContent("Minimum Members") {
-                                    if let band = bandManager.currentBand {
-                                        Text("\(band.minMembersRequired) of \(bandManager.members.count)")
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // MARK: - Scheduled practices on the device calendar
-                    Section {
-                        if calendarManager.isAuthorized {
-                            NavigationLink {
-                                EditCalendarView()
-                                    .environmentObject(calendarManager)
-                            } label: {
-                                HStack {
-                                    Text("Practice calendar")
-                                    Spacer()
-                                    Circle()
-                                        .fill(calendarManager.practiceCalendarColor)
-                                        .frame(width: 14, height: 14)
-                                    Text(calendarManager.practiceCalendarName)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                            }
-
-                            Button {
-                                Task {
-                                    isRefreshingPracticeEvents = true
-                                    await bandManager.syncMissingCalendarEvents(calendarManager: calendarManager)
-                                    isRefreshingPracticeEvents = false
-                                }
-                            } label: {
-                                Label("Refresh practice events", systemImage: "arrow.triangle.2.circlepath")
-                            }
-                            .disabled(isRefreshingPracticeEvents)
-                        } else {
-                            Button(action: handleCalendarTap) {
-                                Label("Connect my calendar", systemImage: "calendar")
-                            }
-                        }
-                    } header: {
-                        Text("Practices on my calendar")
-                    } footer: {
-                        Text("Scheduled practices are added to your calendar automatically, with either availability method.")
-                    }
-
-                    // MARK: - Appearance
-                    Section("Appearance") {
-                        ForEach(AppearanceMode.allCases, id: \.self) { mode in
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    appearanceMode = mode
-                                }
-                            } label: {
-                                HStack {
-                                    Label(mode.rawValue, systemImage: mode.sfSymbol)
-                                        .foregroundStyle(Color.themeTextPrimary)
-                                    Spacer()
-                                    if appearanceMode == mode {
-                                        Image(systemName: "checkmark")
-                                            .foregroundStyle(Color.themeAccent)
-                                            .fontWeight(.semibold)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // MARK: - Permissions
-                    Section("Permissions") {
-                        PermissionRow(
-                            title: "Notifications",
-                            sfSymbol: "bell",
-                            state: notificationPermissionState,
-                            action: handleNotificationTap
-                        )
-                    }
-
-                    // MARK: - Account
-                    Section {
-                        if !bandManager.isLeader {
-                            Button(role: .destructive) {
-                                showLeaveConfirmation = true
-                            } label: {
-                                Text("Leave Band")
-                            }
-                            .confirmationDialog(
-                                "Leave \(bandManager.currentBand?.name ?? "this band")?",
-                                isPresented: $showLeaveConfirmation,
-                                titleVisibility: .visible
-                            ) {
-                                Button("Leave Band", role: .destructive) {
-                                    Task { await bandManager.leaveBand() }
-                                }
-                                Button("Cancel", role: .cancel) {}
-                            } message: {
-                                Text("You'll lose access to this band's calendar and scheduled practices. You can rejoin later with an invite code.")
-                            }
-                        }
-
-                        if bandManager.isLeader {
-                            Button(role: .destructive) {
-                                showDeleteConfirmation = true
-                            } label: {
-                                Text("Delete Band")
-                            }
-                            .confirmationDialog(
-                                "Delete \(bandManager.currentBand?.name ?? "this band")?",
-                                isPresented: $showDeleteConfirmation,
-                                titleVisibility: .visible
-                            ) {
-                                Button("Delete Forever", role: .destructive) {
-                                    Task { await bandManager.deleteBand() }
-                                }
-                                Button("Cancel", role: .cancel) {}
-                            } message: {
-                                Text("This permanently deletes the band, all members, availability data, and scheduled practices for everyone. This cannot be undone.")
-                            }
-                        }
-
-                        Button(role: .destructive) {
                             Task {
-                                bandManager.cleanup()
-                                await authManager.signOut()
+                                isRefreshingPracticeEvents = true
+                                await bandManager.syncMissingCalendarEvents(calendarManager: calendarManager)
+                                isRefreshingPracticeEvents = false
                             }
                         } label: {
-                            Text("Sign Out")
+                            Label("Refresh practice events", systemImage: "arrow.triangle.2.circlepath")
                         }
+                        .disabled(isRefreshingPracticeEvents)
+                    } else {
+                        Button(action: handleCalendarTap) {
+                            Label("Connect my calendar", systemImage: "calendar")
+                        }
+                    }
+                } header: {
+                    Text("Practices on my calendar")
+                } footer: {
+                    Text("Confirmed practices are added to this calendar. Refresh practice events to restore any missing events on this device.")
+                }
 
-                        Button(role: .destructive) {
-                            showDeleteAccountConfirmation = true
+                // MARK: - Appearance
+                Section("Appearance") {
+                    ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                appearanceMode = mode
+                            }
                         } label: {
                             HStack {
-                                Text("Delete Account")
-                                if isDeletingAccount {
-                                    Spacer()
-                                    ProgressView()
+                                Label(mode.rawValue, systemImage: mode.sfSymbol)
+                                    .foregroundStyle(Color.themeTextPrimary)
+                                Spacer()
+                                if appearanceMode == mode {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(Color.themeAccent)
+                                        .fontWeight(.semibold)
                                 }
                             }
                         }
-                        .disabled(isDeletingAccount)
+                    }
+                }
+
+                // MARK: - Permissions
+                Section("Permissions") {
+                    PermissionRow(
+                        title: "Notifications",
+                        sfSymbol: "bell",
+                        state: notificationPermissionState,
+                        action: handleNotificationTap
+                    )
+                }
+
+                // MARK: - Account
+                Section {
+                    if !bandManager.isLeader {
+                        Button(role: .destructive) {
+                            showLeaveConfirmation = true
+                        } label: {
+                            Text("Leave Band")
+                        }
                         .confirmationDialog(
-                            "Delete your account?",
-                            isPresented: $showDeleteAccountConfirmation,
+                            "Leave \(bandManager.currentBand?.name ?? "this band")?",
+                            isPresented: $showLeaveConfirmation,
                             titleVisibility: .visible
                         ) {
-                            Button("Continue", role: .destructive) {
-                                showDeleteAccountFinalAlert = true
+                            Button("Leave Band", role: .destructive) {
+                                Task { await bandManager.leaveBand() }
                             }
                             Button("Cancel", role: .cancel) {}
                         } message: {
-                            Text("This permanently deletes your account, your bands, members, availability, and scheduled practices. This cannot be undone.")
-                        }
-                        .alert("Permanently delete your account?", isPresented: $showDeleteAccountFinalAlert) {
-                            Button("Delete Forever", role: .destructive) {
-                                Task { await performDeleteAccount() }
-                            }
-                            Button("Cancel", role: .cancel) {}
-                        } message: {
-                            Text("There is no way to recover this account or its data once deleted.")
-                        }
-                        .alert("Couldn't delete account", isPresented: Binding(
-                            get: { deleteAccountError != nil },
-                            set: { if !$0 { deleteAccountError = nil } }
-                        )) {
-                            Button("OK", role: .cancel) {}
-                        } message: {
-                            Text(deleteAccountError ?? "")
+                            Text("You'll lose access to this band's calendar and scheduled practices. You can rejoin later with an invite code.")
                         }
                     }
 
-                    // MARK: - About
-                    Section {
-                        HStack {
-                            Text("Version")
-                                .foregroundStyle(Color.themeTextPrimary)
-                            Spacer()
-                            Text("\(Bundle.main.marketingVersion) (\(Bundle.main.buildNumber))")
-                                .foregroundStyle(Color.themeTextSecondary)
+                    if bandManager.isLeader {
+                        Button(role: .destructive) {
+                            showDeleteConfirmation = true
+                        } label: {
+                            Text("Delete Band")
+                        }
+                        .confirmationDialog(
+                            "Delete \(bandManager.currentBand?.name ?? "this band")?",
+                            isPresented: $showDeleteConfirmation,
+                            titleVisibility: .visible
+                        ) {
+                            Button("Delete Forever", role: .destructive) {
+                                Task { await bandManager.deleteBand() }
+                            }
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("This permanently deletes the band, all members, availability data, and scheduled practices for everyone. This cannot be undone.")
                         }
                     }
-                }
-                .listStyle(.insetGrouped)
-                .navigationTitle("Settings")
-                .alert("Edit Band Name", isPresented: $editingBandName) {
-                    TextField("Band name", text: $bandNameText)
-                    Button("Cancel", role: .cancel) {}
-                    Button("Save") {
-                        Task { await bandManager.updateBandName(bandNameText) }
+
+                    Button(role: .destructive) {
+                        Task {
+                            bandManager.cleanup()
+                            await authManager.signOut()
+                        }
+                    } label: {
+                        Text("Sign Out")
+                    }
+
+                    Button(role: .destructive) {
+                        showDeleteAccountConfirmation = true
+                    } label: {
+                        HStack {
+                            Text("Delete Account")
+                            if isDeletingAccount {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(isDeletingAccount)
+                    .confirmationDialog(
+                        "Delete your account?",
+                        isPresented: $showDeleteAccountConfirmation,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Continue", role: .destructive) {
+                            showDeleteAccountFinalAlert = true
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("This permanently deletes your account, your bands, members, availability, and scheduled practices. This cannot be undone.")
+                    }
+                    .alert("Permanently delete your account?", isPresented: $showDeleteAccountFinalAlert) {
+                        Button("Delete Forever", role: .destructive) {
+                            Task { await performDeleteAccount() }
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("There is no way to recover this account or its data once deleted.")
+                    }
+                    .alert("Couldn't delete account", isPresented: Binding(
+                        get: { deleteAccountError != nil },
+                        set: { if !$0 { deleteAccountError = nil } }
+                    )) {
+                        Button("OK", role: .cancel) {}
+                    } message: {
+                        Text(deleteAccountError ?? "")
                     }
                 }
-                .task {
-                    await bandManager.loadWeeklyRules()
-                    await refreshNotificationStatus()
-                    if startsAtAvailability {
-                        scrollProxy.scrollTo("availability", anchor: .top)
+
+                // MARK: - About
+                Section {
+                    HStack {
+                        Text("Version")
+                            .foregroundStyle(Color.themeTextPrimary)
+                        Spacer()
+                        Text("\(Bundle.main.marketingVersion) (\(Bundle.main.buildNumber))")
+                            .foregroundStyle(Color.themeTextSecondary)
                     }
                 }
-                .onChange(of: scenePhase) { _, phase in
-                    if phase == .active {
-                        calendarManager.checkAuthorization()
-                        Task { await refreshNotificationStatus() }
-                    }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("Settings")
+            .alert("Edit Band Name", isPresented: $editingBandName) {
+                TextField("Band name", text: $bandNameText)
+                Button("Cancel", role: .cancel) {}
+                Button("Save") {
+                    Task { await bandManager.updateBandName(bandNameText) }
+                }
+            }
+            .task {
+                await refreshNotificationStatus()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    calendarManager.checkAuthorization()
+                    Task { await refreshNotificationStatus() }
                 }
             }
         }
@@ -463,23 +393,6 @@ struct SettingsView: View {
         case .notDetermined: return .notDetermined
         default: return .denied
         }
-    }
-
-    private var availabilityLinkLabel: some View {
-        HStack {
-            Label("My Availability", systemImage: "person.crop.circle.badge.clock")
-            Spacer()
-            Text(availabilitySummary).foregroundStyle(.secondary).lineLimit(1)
-        }
-    }
-
-    private var availabilitySummary: String {
-        guard let member = bandManager.currentMember else { return "Set up" }
-        guard member.availabilitySetupComplete else { return "Set up" }
-        if member.availabilityMode == .calendar {
-            return calendarManager.isAuthorized ? "Automatic" : "Reconnect calendar"
-        }
-        return bandManager.weeklyRules.isEmpty ? "Set up" : "Manual"
     }
 
     private func handleCalendarTap() {
@@ -559,29 +472,6 @@ struct SettingsView: View {
         await bandManager.uploadBandLogo(imageData: jpegData)
     }
 
-    private static let lastSyncFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .none
-        f.timeStyle = .short
-        return f
-    }()
-
-    private func formatLastSync(_ date: Date) -> String {
-        let interval = Date().timeIntervalSince(date)
-        if interval < 60 { return "Just now" }
-        if interval < 3600 { return "\(Int(interval / 60))m ago" }
-        if interval < 86400 { return "\(Int(interval / 3600))h ago" }
-        return Self.lastSyncFormatter.string(from: date)
-    }
-
-    private func syncCalendar() async {
-        isSyncing = true
-        let start = Date()
-        let end = Calendar.current.date(byAdding: .month, value: 6, to: start) ?? start
-        await bandManager.syncCalendar(calendarManager: calendarManager, from: start, to: end)
-        isSyncing = false
-    }
-
     private func performDeleteAccount() async {
         isDeletingAccount = true
         defer { isDeletingAccount = false }
@@ -593,55 +483,6 @@ struct SettingsView: View {
     }
 
     // MARK: - Calendar Sources List
-    private var calendarSourcesList: some View {
-        List {
-            ForEach(calendarManager.deviceCalendars) { cal in
-                Button {
-                    calendarManager.toggleCalendar(cal.id)
-                } label: {
-                    HStack {
-                        Circle().fill(Color(cgColor: cal.color)).frame(width: 12, height: 12)
-                        Text(cal.title)
-                        Spacer()
-                        if calendarManager.selectedCalendarIds.contains(cal.id) {
-                            Image(systemName: "checkmark").foregroundStyle(.blue)
-                        }
-                    }
-                }
-                .foregroundStyle(.primary)
-            }
-        }
-        .navigationTitle("Calendar Sources")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    // MARK: - Practice Window Picker
-    private var practiceWindowPicker: some View {
-        Form {
-            Section {
-                Picker("Start", selection: Binding(
-                    get: { bandManager.currentMember?.practiceWindowStart ?? 960 },
-                    set: { newVal in Task { try? await bandManager.updatePracticeWindow(start: newVal, end: bandManager.currentMember?.practiceWindowEnd ?? 1380) } }
-                )) {
-                    ForEach(Array(stride(from: 0, through: 1380, by: 30)), id: \.self) { minutes in
-                        Text(TimeHelpers.formatTime(minutes)).tag(minutes)
-                    }
-                }
-
-                Picker("End", selection: Binding(
-                    get: { bandManager.currentMember?.practiceWindowEnd ?? 1380 },
-                    set: { newVal in Task { try? await bandManager.updatePracticeWindow(start: bandManager.currentMember?.practiceWindowStart ?? 960, end: newVal) } }
-                )) {
-                    ForEach(Array(stride(from: 0, through: 1410, by: 30)), id: \.self) { minutes in
-                        Text(TimeHelpers.formatTime(minutes)).tag(minutes)
-                    }
-                }
-            }
-        }
-        .navigationTitle("Practice Window")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
     // MARK: - Practice Duration Picker
     private var practiceDurationPicker: some View {
         let durations = Array(stride(from: 30, through: 480, by: 30))

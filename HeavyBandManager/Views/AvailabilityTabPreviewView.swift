@@ -5,12 +5,13 @@ import SwiftUI
 enum AvailabilityTabScenario: String, CaseIterable, Identifiable {
     case typical = "Calendar overview"
     case automatic = "Automatic availability"
+    case settings = "Settings"
     case empty = "No matching times"
     case setup = "Setup needed"
     case failure = "Save failure"
     case longNames = "Long names"
     var id: String { rawValue }
-    var initialTab: Int { self == .automatic || self == .failure ? 1 : 0 }
+    var initialTab: Int { self == .settings ? 2 : (self == .automatic || self == .failure ? 1 : 0) }
 }
 
 @MainActor
@@ -20,7 +21,7 @@ final class AvailabilityTabReviewStore {
 
     init(_ scenario: AvailabilityTabScenario) {
         band.loadAvailabilityTabPreview(scenario: scenario.rawValue)
-        if scenario == .automatic {
+        if scenario == .automatic || scenario == .settings {
             band.updateOnboardingPreviewAvailability(.calendar, complete: true)
         } else if scenario == .setup {
             band.updateOnboardingPreviewAvailability(.weekly, complete: false)

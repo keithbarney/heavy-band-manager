@@ -33,6 +33,22 @@ final class AvailabilityTabReviewTests: XCTestCase {
         XCTAssertEqual(store.band.weeklyRules.map(\.dayOfWeek), [3])
     }
 
+    func testPracticeWindowSaveRejectsInvalidHoursAndKeepsOtherMembers() async throws {
+        let store = AvailabilityTabReviewStore(.automatic)
+        let member = try XCTUnwrap(store.band.currentMember)
+        do {
+            try await store.band.updatePracticeWindow(start: 1260, end: 1080)
+            XCTFail("Invalid window must not save")
+        } catch {
+            XCTAssertEqual(store.band.currentMember?.practiceWindowStart, member.practiceWindowStart)
+        }
+        try await store.band.updatePracticeWindow(start: 1020, end: 1260)
+        XCTAssertEqual(store.band.currentMember?.practiceWindowStart, 1020)
+        XCTAssertEqual(store.band.currentMember?.practiceWindowEnd, 1260)
+        XCTAssertEqual(store.band.members.count, 4)
+        XCTAssertTrue(store.band.members.filter { $0.id != member.id }.allSatisfy { $0.practiceWindowStart == 1080 })
+    }
+
     func testCalendarWritesAndPermissionsStaySimulated() async throws {
         let store = AvailabilityTabReviewStore(.typical)
         let preferences = UserDefaults.standard.data(forKey: CalendarPreferenceKeys.preferences)
