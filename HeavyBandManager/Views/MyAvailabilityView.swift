@@ -31,15 +31,19 @@ struct MyAvailabilityView: View {
                     Text("Automatic").tag(AvailabilityMode.calendar)
                     Text("Manual").tag(AvailabilityMode.weekly)
                 }
-                .pickerStyle(.inline)
-                .labelsHidden()
-            } header: {
-                Text("How do you want to share your availability?")
+                .pickerStyle(.segmented)
+                .controlSize(.large)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
             } footer: {
-                Text("You can change this any time. Each band member can choose their own method.")
+                Text(selectedMode == .calendar
+                     ? "Share free time from your calendars."
+                     : "Share the same hours each week.")
             }
 
-            calendarSetup
+            if !calendarManager.isAuthorized {
+                calendarSetup
+            }
 
             if selectedMode == .weekly {
                 weeklyEditor
@@ -56,7 +60,7 @@ struct MyAvailabilityView: View {
             }
         }
         .disabled(isSaving)
-        .navigationTitle("My Availability")
+        .navigationTitle("Availability")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isSaving)
         .toolbar {
@@ -127,7 +131,7 @@ struct MyAvailabilityView: View {
             NavigationLink {
                 calendarSourcesList
             } label: {
-                LabeledContent("Calendars to check", value: "\(calendarManager.selectedCalendarIds.count) selected")
+                LabeledContent("Calendars", value: "\(calendarManager.selectedCalendarIds.count) selected")
             }
             NavigationLink {
                 Form {
@@ -151,9 +155,9 @@ struct MyAvailabilityView: View {
                 .navigationTitle("Daily Practice Window")
                 .navigationBarTitleDisplayMode(.inline)
             } label: {
-                LabeledContent("Daily practice window", value: "\(TimeHelpers.formatTime(windowStart)) – \(TimeHelpers.formatTime(windowEnd))")
+                LabeledContent("Practice hours", value: "\(TimeHelpers.formatTime(windowStart)) – \(TimeHelpers.formatTime(windowEnd))")
             }
-            Toggle("Refresh availability on open", isOn: $calendarManager.autoSync)
+            Toggle("Refresh on open", isOn: $calendarManager.autoSync)
                 .onChange(of: calendarManager.autoSync) { _, _ in calendarManager.savePrefs() }
             if calendarManager.selectedCalendarIds.isEmpty {
                 Text("Select at least one calendar to find your free time.").foregroundStyle(.red)
@@ -161,29 +165,31 @@ struct MyAvailabilityView: View {
             if windowStart >= windowEnd {
                 Text("Choose an end time after the start time.").foregroundStyle(.red)
             }
-        } header: {
-            Text("Automatic availability")
         } footer: {
-            Text("Calendar selection and automatic refresh are saved on this device immediately. Tap Save to update your band's availability using these calendars and hours.")
+            Text("Save updates the availability shared with your band.")
         }
     }
 
     private var calendarSourcesList: some View {
         List {
-            ForEach(calendarManager.deviceCalendars) { cal in
-                Button {
-                    calendarManager.toggleCalendar(cal.id)
-                } label: {
-                    HStack {
-                        Circle().fill(Color(cgColor: cal.color)).frame(width: 12, height: 12)
-                        Text(cal.title)
-                        Spacer()
-                        if calendarManager.selectedCalendarIds.contains(cal.id) {
-                            Image(systemName: "checkmark").foregroundStyle(.blue)
+            Section {
+                ForEach(calendarManager.deviceCalendars) { cal in
+                    Button {
+                        calendarManager.toggleCalendar(cal.id)
+                    } label: {
+                        HStack {
+                            Circle().fill(Color(cgColor: cal.color)).frame(width: 12, height: 12)
+                            Text(cal.title)
+                            Spacer()
+                            if calendarManager.selectedCalendarIds.contains(cal.id) {
+                                Image(systemName: "checkmark").foregroundStyle(.blue)
+                            }
                         }
                     }
+                    .foregroundStyle(.primary)
                 }
-                .foregroundStyle(.primary)
+            } footer: {
+                Text("Selections save on this device immediately. Personal event details stay private.")
             }
         }
         .navigationTitle("Calendars to Check")
@@ -193,13 +199,6 @@ struct MyAvailabilityView: View {
     private var weeklyEditor: some View {
         Section {
             VStack(alignment: .leading, spacing: 12) {
-                Text("When can you usually practice?")
-                    .font(.headline)
-
-                Text("Choose the days you’re free to practice.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
                 HStack(spacing: 8) {
                     ForEach(0..<7, id: \.self) { day in
                         Button {
@@ -222,11 +221,6 @@ struct MyAvailabilityView: View {
                         .accessibilityValue(selectedDays.contains(day) ? "Selected" : "Not selected")
                     }
                 }
-
-                Text("Choose a start and end time for those days.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 8)
 
                 HStack {
                     Picker("Start", selection: $startMinutes) {
@@ -251,40 +245,25 @@ struct MyAvailabilityView: View {
             }
             .padding(.vertical, 8)
         } footer: {
-            Text("These hours repeat each week. Your band sees the times you share, not your personal calendar.")
+            Text("Save updates the availability shared with your band.")
         }
     }
 
     private var calendarSetup: some View {
         Section {
-            if calendarManager.isAuthorized {
-                Label("Calendar connected", systemImage: "checkmark.circle")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                Button {
-                    if calendarManager.authStatus == .denied || calendarManager.authStatus == .restricted {
-                        if let url = URL(string: UIApplication.openSettingsURLString) {
-                            openURL(url)
-                        }
-                    } else {
-                        Task { await calendarManager.requestAccess() }
-                    }
-                } label: {
-                    Label("Connect my calendar", systemImage: "calendar")
-                }
+            Button {
                 if calendarManager.authStatus == .denied || calendarManager.authStatus == .restricted {
-                    Text("Allow calendar access in Settings so scheduled practices can be added to your calendar.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                } else {
+                    Task { await calendarManager.requestAccess() }
                 }
+            } label: {
+                Label("Connect calendar", systemImage: "calendar")
             }
-        } header: {
-            Text(selectedMode == .calendar ? "Find openings around your calendar events" : "Put practices on your calendar")
         } footer: {
             Text(selectedMode == .calendar
-                 ? "Scheduled practices are added automatically. Your personal event names and details stay on your device."
-                 : "Scheduled practices are added automatically. Your availability still follows the days and hours you choose.")
+                 ? "Allow calendar access to find free time and add confirmed practices."
+                 : "Allow calendar access to add confirmed practices. Your chosen hours stay the same.")
         }
     }
 
