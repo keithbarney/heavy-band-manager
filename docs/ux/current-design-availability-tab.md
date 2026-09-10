@@ -63,3 +63,9 @@ Availability, Band, and Settings explicitly use native large navigation titles. 
 Inspected [Crouton Settings](https://mobbin.com/screens/69e986b1-7335-474c-b3cc-ed92d463ab2b) and [CLEAR App Settings](https://mobbin.com/screens/d920fbc5-34cd-4507-8c3f-4701ee3c72c1) in Mobbin for the large, leading-aligned heading above settings content.
 
 Production preflight passed with 12 tests and an unsigned Release build. The installed mock build matched its source artifact; Availability showed its large title before and after opening and returning from Practice hours. Screenshot: `.release/availability-tab/screenshots/availability-large-title.png`. Availability remains visible in the dedicated mock simulator.
+
+## Automatic calendar introduction
+
+The user's selected option adds a native calendar Label, the heading “Availability from your calendar,” and a short explanation of checking personal calendars during practice hours and sharing availability without event details. It replaces the previous one-line Automatic footer; Manual retains its weekly-hours explanation. Existing native controls and the prior Mobbin-informed hierarchy remain.
+
+Production preflight passed (12 tests and unsigned Release). The installed mock artifact matched the new build. Reviewed Automatic, opened and returned from Calendars, switched to Manual and confirmed the introduction disappeared, and restored Automatic. At maximum accessibility text size the heading and paragraph wrapped, and scrolling reached the settings below. Normal text size was restored. Screenshot: `.release/availability-tab/screenshots/automatic-calendar-intro.png`. Automatic remains visible on the dedicated mock simulator.

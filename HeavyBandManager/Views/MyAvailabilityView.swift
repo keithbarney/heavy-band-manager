@@ -35,10 +35,33 @@ struct MyAvailabilityView: View {
                 .controlSize(.large)
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
+
+                if selectedMode == .calendar {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label {
+                            Text("Availability from your calendar")
+                                .foregroundStyle(.primary)
+                        } icon: {
+                            Image(systemName: "calendar")
+                                .foregroundStyle(.tint)
+                        }
+                        .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
+
+                        Text("We check your personal calendars for free time during your practice hours. Your band sees your availability, never your event details.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 16)
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                }
             } footer: {
-                Text(selectedMode == .calendar
-                     ? "Share free time from your calendars."
-                     : "Share the same hours each week.")
+                if selectedMode == .weekly {
+                    Text("Share the same hours each week.")
+                }
             }
 
             if !calendarManager.isAuthorized {
