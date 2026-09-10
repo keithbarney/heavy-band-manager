@@ -49,6 +49,25 @@ final class AvailabilityTabReviewTests: XCTestCase {
         XCTAssertTrue(store.band.members.filter { $0.id != member.id }.allSatisfy { $0.practiceWindowStart == 1080 })
     }
 
+    func testBandEditsStayInTheirScenarioAndRespectOrganizerRole() async {
+        let session = AvailabilityTabReviewSession()
+        let organizer = session.store(.band).band
+        await organizer.updateBandName("Updated mock band")
+        await organizer.updatePracticeDuration(min: 90, max: 150)
+        await organizer.updateMinMembersRequired(2)
+        XCTAssertEqual(session.store(.band).band.currentBand?.name, "Updated mock band")
+        XCTAssertEqual(organizer.currentBand?.minPracticeMinutes, 90)
+        XCTAssertEqual(organizer.currentBand?.maxPracticeMinutes, 150)
+        XCTAssertEqual(organizer.currentBand?.minMembersRequired, 2)
+        XCTAssertEqual(organizer.members.count, 4)
+        let member = session.store(.bandMember).band
+        XCTAssertFalse(member.isLeader)
+        await member.updateBandName("Not allowed")
+        await member.updateMinMembersRequired(1)
+        XCTAssertEqual(member.currentBand?.name, "The Night Shift")
+        XCTAssertEqual(member.currentBand?.minMembersRequired, 3)
+    }
+
     func testCalendarWritesAndPermissionsStaySimulated() async throws {
         let store = AvailabilityTabReviewStore(.typical)
         let preferences = UserDefaults.standard.data(forKey: CalendarPreferenceKeys.preferences)

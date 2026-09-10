@@ -2,13 +2,13 @@
 
 Branch: `codex/current-design-availability-tab`, based on `main` at `a3a4df4`. The broader native redesign remains on `codex/native-ios-ui`.
 
-The app keeps its existing calendar, month scrolling, availability dots, confirmed practice circles, scheduling sheets, appearance, and settings. Navigation is now Calendar · Availability · Settings. The middle tab uses the existing My Availability editor for automatic calendar-based availability or manual weekly hours. Save stays in the tab and shows the existing success toast. The calendar setup card routes to that tab. Availability controls are no longer duplicated in Settings. Changing bands recreates the editor so another band's draft cannot appear there.
+The app keeps its existing calendar, month scrolling, availability dots, confirmed practice circles, scheduling sheets, appearance, and settings. Navigation is now Calendar · Availability · Band · Settings. The Availability tab uses the existing My Availability editor for automatic calendar-based availability or manual weekly hours. Save stays in the tab and shows the existing success toast. The calendar setup card routes to that tab. Availability controls are no longer duplicated in Settings. Changing bands recreates the editor so another band's draft cannot appear there.
 
 The calendar observes full availability-slot changes, including updated hours with an unchanged slot count, so its cached dots refresh after editing availability.
 
 ## Isolated simulator review
 
-The opt-in Debug condition `AVAILABILITY_TAB_PREVIEW` provides Calendar overview, Automatic availability, Settings, No matching times, Setup needed, Save failure, and Long names. Every scenario owns in-memory band and calendar stores. Switching preserves saved edits; Reset affects only the selected scenario. The persistent Mock data header remains visible while navigating. Unsaved drafts reset when changing scenarios.
+The opt-in Debug condition `AVAILABILITY_TAB_PREVIEW` provides Calendar overview, Automatic availability, Settings, Band, Band member, No matching times, Setup needed, Save failure, and Long names. Every scenario owns in-memory band and calendar stores. Switching preserves saved edits; Reset affects only the selected scenario. The persistent Mock data header remains visible while navigating. Unsaved drafts reset when changing scenarios.
 
 This reuses the earlier review's fixture and calendar isolation without adopting the redesign's screens. Mock calendar operations and notifications are simulated; backend requests are directed to unused loopback, and background sync is disabled. Production builds retain their normal service implementations. `SCREENSHOT_MODE` remains false. The preview does not use a signed-in account or personal calendars.
 
@@ -45,3 +45,13 @@ The mode choice now uses a large native segmented control. Connected users see o
 Mobbin references inspected: [Beside preferred hours](https://mobbin.com/screens/7c27d1e5-e5dc-4310-a583-decd5ed6cba1) for a focused hours editor with one explanation, and [Evernote calendar selection](https://mobbin.com/flows/7929a139-755b-4f9a-9d9f-c333b85d9c47) for putting calendar details on a separate screen. These inform the hierarchy; the controls remain native SwiftUI.
 
 Checked both automatic and manual layouts in the installed dark-mode mock preview. Calendar-source and practice-hour details opened; both automatic Save and a changed Tuesday manual schedule displayed “Availability saved.” Production preflight and both signed phone/unsigned simulator builds passed. Screenshot: `.release/availability-tab/screenshots/availability-compact-dark.png`. The signed normal-data build updates the existing Band Practice (L) installation on Keith’s iPhone, version 1.3.0 (8).
+
+## Dedicated Band tab
+
+Band now owns name/logo, the member list and member editor, invite code/sharing, organizer scheduling rules, and role-appropriate Leave/Delete Band actions. A native toolbar button opens the existing band switcher. Settings keeps profile, the practice output calendar, appearance, notifications, and account controls. The four native tabs retain the current app styling.
+
+Band and Band member mock scenarios enter the new tab as organizer and ordinary member. Organizer name/duration/minimum-member edits are simulated in memory and retained per scenario. Production service behavior is unchanged. This extraction retains the grouped native settings pattern used in the prior Mobbin review.
+
+Verification: 17 mock tests and 12 production tests passed; production unsigned Release preflight and signed phone build passed. In the installed mock simulator, Minimum Members was changed from three to two and retained after switching scenarios. Practice Duration and a member editor opened and returned; the band switcher opened and dismissed. The member scenario displayed a read-only band name and Leave Band, with organizer editing and scheduling controls hidden. Settings showed personal/app controls without band sections. The installed executable and debug library matched the tested build. Screenshot: `.release/availability-tab/screenshots/band-tab.png`.
+
+Band was left visible in the dedicated Band Practice — Native UI simulator using mock data. Direct bottom-tab clicks remain unavailable through the shared Simulator computer-use coordinate bridge; scenario entry points exercised the actual tab views. The normal-data development build was installed in place and launched on Keith’s iPhone as Band Practice (L), version 1.3.0 (8).

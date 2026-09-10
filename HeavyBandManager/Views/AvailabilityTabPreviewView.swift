@@ -6,12 +6,21 @@ enum AvailabilityTabScenario: String, CaseIterable, Identifiable {
     case typical = "Calendar overview"
     case automatic = "Automatic availability"
     case settings = "Settings"
+    case band = "Band"
+    case bandMember = "Band member"
     case empty = "No matching times"
     case setup = "Setup needed"
     case failure = "Save failure"
     case longNames = "Long names"
     var id: String { rawValue }
-    var initialTab: Int { self == .settings ? 2 : (self == .automatic || self == .failure ? 1 : 0) }
+    var initialTab: Int {
+        switch self {
+        case .settings: return 3
+        case .band, .bandMember: return 2
+        case .automatic, .failure: return 1
+        default: return 0
+        }
+    }
 }
 
 @MainActor
@@ -112,7 +121,7 @@ extension BandManager {
                        availabilityMode: .weekly, availabilitySetupComplete: !(scenario == "Setup needed" && index > 1), joinedAt: now)
         }
         let band = BandWithMembers(id: bandID, name: scenario == "Long names" ? "The Extraordinary Midnight Rehearsal Collective" : "The Night Shift",
-            creatorId: Self.onboardingPreviewUserId, leaderId: Self.onboardingPreviewUserId,
+            creatorId: Self.onboardingPreviewUserId, leaderId: scenario == "Band member" ? members[1].userId : Self.onboardingPreviewUserId,
             defaultPracticeLocation: "Studio 4, Riverside Rehearsal Rooms", inviteCode: "MOCK-ONLY", logoUrl: nil, createdAt: now,
             minPracticeMinutes: 60, maxPracticeMinutes: 120, minMembersRequired: 3, bandMembers: members)
         bands = [band]
@@ -135,5 +144,20 @@ extension BandManager {
         ]
         weeklyRules = [1, 4].map { WeeklyAvailabilityRule(id: UUID(), memberId: members[0].id, bandId: bandID, dayOfWeek: $0, startMinutes: 1140, endMinutes: 1320) }
     }
+
+    func updateReviewBand(name: String? = nil, minimum: Int? = nil, maximum: Int? = nil, requiredMembers: Int? = nil) {
+        guard let band = currentBand else { return }
+        let updated = BandWithMembers(
+            id: band.id, name: name ?? band.name, creatorId: band.creatorId, leaderId: band.leaderId,
+            defaultPracticeLocation: band.defaultPracticeLocation, inviteCode: band.inviteCode,
+            logoUrl: band.logoUrl, createdAt: band.createdAt,
+            minPracticeMinutes: minimum ?? band.minPracticeMinutes,
+            maxPracticeMinutes: maximum ?? band.maxPracticeMinutes,
+            minMembersRequired: requiredMembers ?? band.minMembersRequired, bandMembers: band.bandMembers
+        )
+        currentBand = updated
+        bands = bands.map { $0.id == band.id ? updated : $0 }
+    }
+
 }
 #endif

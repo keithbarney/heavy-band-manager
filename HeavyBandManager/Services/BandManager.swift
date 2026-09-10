@@ -935,6 +935,9 @@ final class BandManager: ObservableObject {
 
     func updateBandName(_ name: String) async {
         guard let band = currentBand, !name.isEmpty, isLeader else { return }
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        updateReviewBand(name: name)
+#else
         do {
             try await Config.supabase
                 .from("bands")
@@ -943,6 +946,7 @@ final class BandManager: ObservableObject {
                 .execute()
             try? await refreshBandList()
         } catch { print("Update band name error: \(error)") }
+#endif
     }
 
     func updatePracticeLocation(_ location: String) async {
@@ -959,6 +963,9 @@ final class BandManager: ObservableObject {
 
     func updateMinMembersRequired(_ count: Int) async {
         guard let band = currentBand, isLeader, count >= 1 else { return }
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        updateReviewBand(requiredMembers: count)
+#else
         do {
             try await Config.supabase
                 .from("bands")
@@ -967,10 +974,14 @@ final class BandManager: ObservableObject {
                 .execute()
             try? await refreshBandList()
         } catch { print("Update min members error: \(error)") }
+#endif
     }
 
     func updatePracticeDuration(min: Int, max: Int) async {
         guard let band = currentBand, isLeader, max >= min else { return }
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        updateReviewBand(minimum: min, maximum: max)
+#else
         do {
             try await Config.supabase
                 .from("bands")
@@ -982,6 +993,7 @@ final class BandManager: ObservableObject {
                 .execute()
             try? await refreshBandList()
         } catch { print("Update practice duration error: \(error)") }
+#endif
     }
 
     func uploadBandLogo(imageData: Data) async {

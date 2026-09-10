@@ -35,11 +35,16 @@ struct BandTabs: View {
             .tabItem { Label("Availability", systemImage: "person.crop.circle.badge.clock") }
             .tag(1)
 
+            BandSettingsView()
+                .id(bandManager.currentBand?.id)
+                .tabItem { Label("Band", systemImage: "person.3") }
+                .tag(2)
+
             SettingsView()
                 .tabItem {
                     Label("Settings", systemImage: "gearshape")
                 }
-                .tag(2)
+                .tag(3)
         }
         .tint(Color.themeAccent)
         .task { await checkPermissions() }
