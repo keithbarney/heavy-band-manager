@@ -5,7 +5,10 @@ struct MemberAvatar: View {
     var size: CGFloat = 36
 
     var body: some View {
-        if let urlString = member.avatarUrl, let url = URL(string: urlString) {
+        if let artwork = ReviewArtwork.resolve(member.avatarUrl) {
+            ReviewArtworkView(artwork: artwork, size: size)
+                .accessibilityIdentifier("member-photo-\(member.name)")
+        } else if let urlString = member.avatarUrl, let url = URL(string: urlString) {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .success(let image):

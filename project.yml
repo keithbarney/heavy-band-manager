@@ -13,7 +13,7 @@ settings:
     CURRENT_PROJECT_VERSION: 8
     DEVELOPMENT_TEAM: BXKNJTU253
     CODE_SIGN_STYLE: Automatic
-    TARGETED_DEVICE_FAMILY: "1"
+    TARGETED_DEVICE_FAMILY: "1,2"
 
 schemes:
   HeavyBandManager:
@@ -26,6 +26,14 @@ schemes:
       config: Debug
       targets:
         - HeavyBandManagerTests
+  HeavyBandManagerScreenshots:
+    build:
+      targets:
+        HeavyBandManager: all
+    test:
+      config: Debug
+      targets:
+        - HeavyBandManagerScreenshotTests
 
 targets:
   HeavyBandManager:
@@ -36,7 +44,7 @@ targets:
     settings:
       base:
         INFOPLIST_FILE: HeavyBandManager/Info.plist
-        TARGETED_DEVICE_FAMILY: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: "NO"
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: "NO"
       configs:
@@ -47,6 +55,18 @@ targets:
         Release:
           PRODUCT_BUNDLE_IDENTIFIER: com.keithbarney.heavybandmanager
           BUNDLE_DISPLAY_NAME: Band Practice
+    postBuildScripts:
+      - name: Copy isolated review artwork
+        basedOnDependencyAnalysis: false
+        script: |
+          artwork_destination="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/MockArtwork"
+          if [ "$CONFIGURATION" = "Debug" ] && [ "$PLATFORM_NAME" = "iphonesimulator" ] && [ "$AVAILABILITY_TAB_PREVIEW_CONDITION" = "AVAILABILITY_TAB_PREVIEW" ]; then
+            rm -rf "$artwork_destination"
+            mkdir -p "$artwork_destination"
+            cp "$SRCROOT"/Fixtures/MinorThreat/*.jpg "$SRCROOT"/Fixtures/MinorThreat/*.png "$artwork_destination/"
+          elif [ -d "$artwork_destination" ]; then
+            rm -rf "$artwork_destination"
+          fi
     dependencies:
       - package: Supabase
       - package: DialKit
@@ -69,6 +89,19 @@ targets:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) $(AVAILABILITY_TAB_PREVIEW_CONDITION)"
       base:
         GENERATE_INFOPLIST_FILE: "YES"
+
+  HeavyBandManagerScreenshotTests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - HeavyBandManagerScreenshotTests
+    dependencies:
+      - target: HeavyBandManager
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.keithbarney.heavybandmanager.screenshots
+        GENERATE_INFOPLIST_FILE: "YES"
+        TEST_TARGET_NAME: HeavyBandManager
 
 packages:
   Supabase:

@@ -54,6 +54,8 @@ struct MyAvailabilityView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.top, 16)
+                    // Keep the final line clear of the native grouped row's rounded corner.
+                    .padding(.bottom, 24)
                     .listRowInsets(EdgeInsets())
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
@@ -83,6 +85,7 @@ struct MyAvailabilityView: View {
             }
         }
         .disabled(isSaving)
+        .modifier(ReadableListLayout())
         .navigationTitle("Availability")
         .navigationBarTitleDisplayMode(.large)
         .navigationBarBackButtonHidden(isSaving)

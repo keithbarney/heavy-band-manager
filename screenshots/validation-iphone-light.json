@@ -1,0 +1,75 @@
+{
+  "valid": true,
+  "display": "iphone-6.9",
+  "specifications_checked": "2026-09-12",
+  "folder": "/Users/keithbarney/Documents/Github/heavy-band-manager/screenshots/iphone/light",
+  "errors": [],
+  "images": [
+    {
+      "file": "1-iphone-light-calendar.png",
+      "bytes": 269891,
+      "sha256": "a26c793cad4a8554c3b0051066e28f7541991aab2c67a9ab489c99c7987703bf",
+      "width": 1320,
+      "height": 2868,
+      "format": "PNG",
+      "mode": "RGB",
+      "errors": []
+    },
+    {
+      "file": "12-iphone-light-confirmation.png",
+      "bytes": 466077,
+      "sha256": "66a50c51c48bac1502076b287ef1b38d211d670b08668c14b06bb481e3881274",
+      "width": 1320,
+      "height": 2868,
+      "format": "PNG",
+      "mode": "RGB",
+      "errors": []
+    },
+    {
+      "file": "13-iphone-light-personal-calendar.png",
+      "bytes": 269835,
+      "sha256": "a86f92031e859b327365a70018316c1fe9faad59cecf208c3d0bb1451875d15c",
+      "width": 1320,
+      "height": 2868,
+      "format": "PNG",
+      "mode": "RGB",
+      "errors": []
+    },
+    {
+      "file": "14-iphone-light-appearance.png",
+      "bytes": 418781,
+      "sha256": "758d109da85cf359645e4887e00dc485419b5c58e8f1c5f94d5a49c901565852",
+      "width": 1320,
+      "height": 2868,
+      "format": "PNG",
+      "mode": "RGB",
+      "errors": []
+    },
+    {
+      "file": "8-iphone-light-availability-automatic.png",
+      "bytes": 293647,
+      "sha256": "fd6b9c870c98e3c70af5734f03e062f756f024d7d2a4061b510d33ec89215cc3",
+      "width": 1320,
+      "height": 2868,
+      "format": "PNG",
+      "mode": "RGB",
+      "errors": []
+    }
+  ],
+  "validatedAt": "2026-09-13T20:53:24.337095+00:00",
+  "requestedCombination": "iphone/light",
+  "visualReview": {
+    "passed": true,
+    "hashes": {
+      "iphone/light/1-iphone-light-calendar.png": "a26c793cad4a8554c3b0051066e28f7541991aab2c67a9ab489c99c7987703bf",
+      "iphone/light/12-iphone-light-confirmation.png": "66a50c51c48bac1502076b287ef1b38d211d670b08668c14b06bb481e3881274",
+      "iphone/light/13-iphone-light-personal-calendar.png": "a86f92031e859b327365a70018316c1fe9faad59cecf208c3d0bb1451875d15c",
+      "iphone/light/8-iphone-light-availability-automatic.png": "fd6b9c870c98e3c70af5734f03e062f756f024d7d2a4061b510d33ec89215cc3",
+      "iphone/light/14-iphone-light-appearance.png": "758d109da85cf359645e4887e00dc485419b5c58e8f1c5f94d5a49c901565852"
+    },
+    "notes": [
+      "Inspected updated availability card at full size and five-card contact sheet.",
+      "Exact approved headline fits two lines at 102px with safe margins; native Automatic and Manual controls remain readable."
+    ]
+  }
+}

@@ -4,6 +4,7 @@ struct CalendarMonthView: View {
     var onOpenAvailability: (() -> Void)? = nil
     @EnvironmentObject var bandManager: BandManager
     @EnvironmentObject var calendarManager: CalendarManager
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     @State private var sheetDate: String?
     @State private var showUpcoming = false
@@ -101,6 +102,8 @@ struct CalendarMonthView: View {
             }
             } // end else (calendar grid)
         }
+        .frame(maxWidth: sizeClass == .regular ? 1000 : .infinity)
+        .frame(maxWidth: .infinity)
         .background(Color.themeBg)
         .sheet(item: Binding(
             get: { sheetDate.flatMap { DaySelection(date: $0) } },
@@ -112,6 +115,12 @@ struct CalendarMonthView: View {
         .task {
             await loadVisibleRange()
             refreshCache()
+            #if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+            if ProcessInfo.processInfo.arguments.contains("--screenshot-screen=day-detail") {
+                let target = calendar.date(byAdding: .day, value: 4, to: Date())!
+                sheetDate = TimeHelpers.dateString(from: target)
+            }
+            #endif
         }
         .onChange(of: bandManager.currentBand?.id) { _, _ in
             Task {
@@ -152,15 +161,7 @@ struct CalendarMonthView: View {
                 } label: {
                     HStack(spacing: 8) {
                         if let logoUrl = bandManager.currentBand?.logoUrl, let url = URL(string: logoUrl) {
-                            AsyncImage(url: url) { image in
-                                image.resizable().scaledToFill()
-                            } placeholder: {
-                                Circle()
-                                    .fill(Color.themeAccent.opacity(0.2))
-                                    .frame(width: 36, height: 36)
-                            }
-                            .frame(width: 36, height: 36)
-                            .clipShape(Circle())
+                            BandLogoImage(url: url, size: 36)
                         } else {
                             Circle()
                                 .fill(Color.themeAccent.opacity(0.2))
@@ -188,6 +189,8 @@ struct CalendarMonthView: View {
                         Image(systemName: showUpcoming ? "calendar" : "line.3.horizontal")
                             .padding(.leading, 8)
                     }
+                    .accessibilityIdentifier("calendar-view-toggle")
+                    .accessibilityLabel(showUpcoming ? "Show calendar" : "Show upcoming practices")
 
                     Button {
                         withAnimation { scrollProxy?.scrollTo(0, anchor: .top) }
@@ -264,7 +267,7 @@ struct CalendarMonthView: View {
                     if let date = date {
                         dayCell(date)
                     } else {
-                        Color.clear.frame(height: 52)
+                        Color.clear.frame(height: sizeClass == .regular ? 84 : 52)
                     }
                 }
             }
@@ -295,7 +298,6 @@ struct CalendarMonthView: View {
         let isPast = date < calendar.startOfDay(for: Date()) && !isToday
         let quality = overlapDots[dateStr] ?? .none
         let hasPractice = practiceSet.contains(dateStr)
-        let hasOpening = quality != .none || hasPractice
         let dayNum = calendar.component(.day, from: date)
 
         let textColor: Color = {
@@ -334,11 +336,13 @@ struct CalendarMonthView: View {
                 .frame(height: 8)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 52)
+            .frame(height: sizeClass == .regular ? 84 : 52)
             .padding(2)
             .background(Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
+        .accessibilityIdentifier("calendar-day-\(dateStr)")
+        .accessibilityValue((hasPractice ? "Scheduled practice. " : "") + (quality == .full ? "All members available" : quality == .partial ? "Partial availability" : "No matching availability"))
     }
 
     // MARK: - Upcoming Practices List

@@ -22,12 +22,13 @@
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
-	<key>UIDeviceFamily</key>
+	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
-		<integer>1</integer>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>UIRequiresFullScreen</key>
-	<true/>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Band Practice adds scheduled practices to your calendar. With Automatic availability, it also checks events in the calendars you select to find free practice times. Manual availability uses your chosen weekly hours.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>

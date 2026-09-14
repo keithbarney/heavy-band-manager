@@ -123,14 +123,7 @@ struct DayDetailSheet: View {
         let memberSlots = daySlots.filter { $0.memberId == member.id }
 
         return HStack(spacing: 12) {
-            Circle()
-                .fill(Color(hex: member.color))
-                .frame(width: 32, height: 32)
-                .overlay(
-                    Text(String(member.name.prefix(1)).uppercased())
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
-                )
+            MemberAvatar(member: member, size: 32)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(member.name)
@@ -229,14 +222,7 @@ struct DayDetailSheet: View {
 
                 HStack(spacing: -6) {
                     ForEach(freeMembers) { member in
-                        Circle()
-                            .fill(Color(hex: member.color))
-                            .frame(width: 22, height: 22)
-                            .overlay(
-                                Text(String(member.name.prefix(1)).uppercased())
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundColor(.white)
-                            )
+                        MemberAvatar(member: member, size: 22)
                             .overlay(
                                 Circle()
                                     .strokeBorder(Color(.systemBackground), lineWidth: 1.5)
@@ -246,6 +232,7 @@ struct DayDetailSheet: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("practice-window-\(window.startMinutes)-\(window.endMinutes)")
         .disabled(!bandManager.isLeader)
     }
 }

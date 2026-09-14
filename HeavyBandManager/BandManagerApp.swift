@@ -25,7 +25,7 @@ struct BandManagerApp: App {
                 .environmentObject(bandManager)
                 .environmentObject(calendarManager)
                 .environmentObject(toastManager)
-                .preferredColorScheme(appearanceMode.colorScheme)
+                .preferredColorScheme(screenshotColorScheme ?? appearanceMode.colorScheme)
                 .overlay(alignment: .bottom) {
                     ToastView()
                         .environmentObject(toastManager)
@@ -114,6 +114,18 @@ struct BandManagerApp: App {
         if UserDefaults.standard.string(forKey: "appearanceMigrated") == nil {
             UserDefaults.standard.removeObject(forKey: "appearanceMode")
             UserDefaults.standard.set("done", forKey: "appearanceMigrated")
+        }
+    }
+
+    private var screenshotColorScheme: ColorScheme? {
+        guard let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--screenshot-appearance=") }) else {
+            return nil
+        }
+
+        switch argument.split(separator: "=", maxSplits: 1).last {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil
         }
     }
 

@@ -49,13 +49,7 @@ struct BandSettingsView: View {
                                 if isUploadingLogo {
                                     ProgressView()
                                 } else if let logoUrl = bandManager.currentBand?.logoUrl, let url = URL(string: logoUrl) {
-                                    AsyncImage(url: url) { image in
-                                        image.resizable().scaledToFill()
-                                    } placeholder: {
-                                        ProgressView()
-                                    }
-                                    .frame(width: 36, height: 36)
-                                    .clipShape(Circle())
+                                    BandLogoImage(url: url, size: 36)
                                 } else {
                                     Circle()
                                         .fill(Color.themeAccent.opacity(0.2))
@@ -184,6 +178,7 @@ struct BandSettingsView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .modifier(ReadableListLayout())
             .navigationTitle("Band")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {

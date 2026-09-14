@@ -187,6 +187,7 @@ struct SettingsView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .modifier(ReadableListLayout())
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
             .task {

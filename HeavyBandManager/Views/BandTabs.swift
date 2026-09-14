@@ -46,6 +46,7 @@ struct BandTabs: View {
                 }
                 .tag(3)
         }
+        .tabViewStyle(.sidebarAdaptable)
         .tint(Color.themeAccent)
         .task { await checkPermissions() }
         .onChange(of: scenePhase) { _, newPhase in

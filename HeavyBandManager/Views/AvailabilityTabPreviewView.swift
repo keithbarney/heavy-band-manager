@@ -5,6 +5,7 @@ import SwiftUI
 enum AvailabilityTabScenario: String, CaseIterable, Identifiable {
     case typical = "Calendar overview"
     case automatic = "Automatic availability"
+    case manual = "Manual availability"
     case settings = "Settings"
     case band = "Band"
     case bandMember = "Band member"
@@ -17,7 +18,7 @@ enum AvailabilityTabScenario: String, CaseIterable, Identifiable {
         switch self {
         case .settings: return 3
         case .band, .bandMember: return 2
-        case .automatic, .failure: return 1
+        case .automatic, .manual, .failure: return 1
         default: return 0
         }
     }
@@ -55,33 +56,58 @@ final class AvailabilityTabReviewSession: ObservableObject {
 struct AvailabilityTabPreviewView: View {
     @StateObject private var session = AvailabilityTabReviewSession()
     @EnvironmentObject private var toastManager: ToastManager
-    @State private var scenario: AvailabilityTabScenario = .typical
+    @State private var scenario: AvailabilityTabScenario = Self.initialScreenshotScenario
     @State private var revision = 0
+    private var screenshotMode: Bool {
+        ProcessInfo.processInfo.arguments.contains("--screenshot-mode")
+    }
+
+    private static var initialScreenshotScenario: AvailabilityTabScenario {
+        guard let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--screenshot-screen=") }) else {
+            return .typical
+        }
+
+        switch argument.split(separator: "=", maxSplits: 1).last {
+        case "automatic": return .automatic
+        case "manual": return .manual
+        case "band": return .band
+        case "settings": return .settings
+        default: return .typical
+        }
+    }
 
     var body: some View {
         let store = session.store(scenario)
-        VStack(spacing: 0) {
-            HStack {
-                Label("Mock data", systemImage: "testtube.2").font(.caption)
-                Button("Reset scenario", systemImage: "arrow.counterclockwise") {
-                    session.reset(scenario)
-                    toastManager.message = nil
-                    revision += 1
+        let content = AvailabilityTabReviewContent(scenario: scenario, band: store.band, calendar: store.calendar)
+            .environmentObject(store.band).environmentObject(store.calendar)
+            .id("\(scenario.rawValue)-\(revision)")
+
+        Group {
+            if screenshotMode {
+                content
+            } else {
+                VStack(spacing: 0) {
+                    HStack {
+                        Label("Mock data", systemImage: "testtube.2").font(.caption)
+                        Button("Reset scenario", systemImage: "arrow.counterclockwise") {
+                            session.reset(scenario)
+                            toastManager.message = nil
+                            revision += 1
+                        }
+                        .labelStyle(.iconOnly)
+                        Spacer()
+                        Picker("Review scenario", selection: $scenario) {
+                            ForEach(AvailabilityTabScenario.allCases) { Text($0.rawValue).tag($0) }
+                        }
+                        .pickerStyle(.menu).font(.subheadline)
+                        .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .dynamicTypeSize(.large)
+                    .padding(.horizontal).padding(.vertical, 8)
+                    .background(.regularMaterial)
+                    content
                 }
-                .labelStyle(.iconOnly)
-                Spacer()
-                Picker("Review scenario", selection: $scenario) {
-                    ForEach(AvailabilityTabScenario.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.menu).font(.subheadline)
-                .fixedSize(horizontal: true, vertical: false)
             }
-            .dynamicTypeSize(.large)
-            .padding(.horizontal).padding(.vertical, 8)
-            .background(.regularMaterial)
-            AvailabilityTabReviewContent(scenario: scenario, band: store.band, calendar: store.calendar)
-                .environmentObject(store.band).environmentObject(store.calendar)
-                .id("\(scenario.rawValue)-\(revision)")
         }
         .onChange(of: scenario) { _, value in
             toastManager.message = nil
@@ -112,17 +138,19 @@ private struct AvailabilityTabReviewContent: View {
 extension BandManager {
     func loadAvailabilityTabPreview(scenario: String = "Typical band") {
         let now = Date()
+        let minorThreat = ProcessInfo.processInfo.arguments.contains("--screenshot-band=minor-threat")
+        let marketingStory = ProcessInfo.processInfo.arguments.contains("--screenshot-story")
         let bandID = UUID(uuidString: "10000000-0000-0000-0000-000000000001")!
-        let names = scenario == "Long names" ? ["Alexandra Montgomery-Williams", "Christopher Rivera-Sanchez", "Sam", "Jamie"] : ["Alex", "Riley", "Sam", "Jamie"]
+        let names = scenario == "Long names" ? ["Alexandra Montgomery-Williams", "Christopher Rivera-Sanchez", "Sam", "Jamie"] : minorThreat ? ["Ian MacKaye", "Lyle Preslar", "Brian Baker", "Jeff Nelson"] : ["Alex", "Riley", "Sam", "Jamie"]
         let members = names.enumerated().map { index, name in
             BandMember(id: UUID(), bandId: bandID, userId: index == 0 ? Self.onboardingPreviewUserId : UUID(), name: name,
                        instrument: ["Vocals", "Guitar", "Bass", "Drums"][index], color: "#007AFF",
-                       practiceWindowStart: 1080, practiceWindowEnd: 1320, avatarUrl: nil,
+                       practiceWindowStart: 1080, practiceWindowEnd: 1320, avatarUrl: minorThreat ? "mock-artwork://" + ["ian", "lyle", "brian", "jeff"][index] : nil,
                        availabilityMode: .weekly, availabilitySetupComplete: !(scenario == "Setup needed" && index > 1), joinedAt: now)
         }
-        let band = BandWithMembers(id: bandID, name: scenario == "Long names" ? "The Extraordinary Midnight Rehearsal Collective" : "The Night Shift",
+        let band = BandWithMembers(id: bandID, name: scenario == "Long names" ? "The Extraordinary Midnight Rehearsal Collective" : minorThreat ? "Minor Threat" : "The Night Shift",
             creatorId: Self.onboardingPreviewUserId, leaderId: scenario == "Band member" ? members[1].userId : Self.onboardingPreviewUserId,
-            defaultPracticeLocation: "Studio 4, Riverside Rehearsal Rooms", inviteCode: "MOCK-ONLY", logoUrl: nil, createdAt: now,
+            defaultPracticeLocation: "Studio 4, Riverside Rehearsal Rooms", inviteCode: minorThreat ? "THREAT" : "NIGHT24", logoUrl: minorThreat ? "mock-artwork://logo" : nil, createdAt: now,
             minPracticeMinutes: 60, maxPracticeMinutes: 120, minMembersRequired: 3, bandMembers: members)
         bands = [band]
         currentBand = band
@@ -132,16 +160,22 @@ extension BandManager {
         func day(_ offset: Int) -> String { TimeHelpers.dateString(from: Calendar.current.date(byAdding: .day, value: offset, to: now)!) }
         slots = []
         if scenario != "No matching times" {
-            for offset in [1, 2, 4, 5, 7, 9, 12] {
-                for (index, member) in members.enumerated() where member.availabilitySetupComplete && !(offset == 1 && index == 3) {
-                    slots.append(AvailabilitySlot(id: UUID(), memberId: member.id, bandId: bandID, date: day(offset), startMinutes: 1140, endMinutes: 1320, confirmed: true))
+            let fullDays = [2, 4, 7, 8, 11, 15, 17, 19, 22, 25, 29, 32]
+            let partialDays = [1, 3, 5, 9, 12, 14, 16, 18, 21, 24, 27, 30, 34]
+            let offsets = marketingStory ? (fullDays + partialDays).sorted() : [1, 2, 4, 5, 7, 9, 12]
+            for offset in offsets {
+                let missingMember = marketingStory ? (partialDays.contains(offset) ? offset % 4 : -1) : (offset == 1 ? 3 : -1)
+                for (index, member) in members.enumerated() where member.availabilitySetupComplete && index != missingMember {
+                    let hours = marketingStory ? [(1140, 1320), (1080, 1260), (1140, 1290), (1110, 1320)][index] : (1140, 1320)
+                    slots.append(AvailabilitySlot(id: UUID(), memberId: member.id, bandId: bandID, date: day(offset), startMinutes: hours.0, endMinutes: hours.1, confirmed: true))
                 }
             }
         }
-        practices = scenario == "Setup needed" || scenario == "No matching times" ? [] : [
-            ScheduledPractice(id: UUID(), bandId: bandID, date: day(4), startMinutes: 1140, endMinutes: 1260,
+        let practiceOffsets = scenario == "Setup needed" || scenario == "No matching times" ? [] : marketingStory ? [8, 11, 15, 17] : [4]
+        practices = practiceOffsets.map { offset in
+            ScheduledPractice(id: UUID(), bandId: bandID, date: day(offset), startMinutes: 1140, endMinutes: 1260,
                 location: band.defaultPracticeLocation, scheduledBy: Self.onboardingPreviewUserId, scheduledAt: now, calendarEventId: nil)
-        ]
+        }
         weeklyRules = [1, 4].map { WeeklyAvailabilityRule(id: UUID(), memberId: members[0].id, bandId: bandID, dayOfWeek: $0, startMinutes: 1140, endMinutes: 1320) }
     }
 

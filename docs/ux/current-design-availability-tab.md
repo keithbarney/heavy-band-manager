@@ -25,7 +25,7 @@ Mobbin tools were unavailable during this refinement; the current app and the us
 - Operated all six scenario choices in Simulator. Setup card opened the selected Availability tab; Manual → Tuesday → Save remained in the tab and displayed “Availability saved.” A failed save kept the selected days; disabling the simulated failure and retrying succeeded. Switching away and back retained Tuesday and the disabled failure toggle. Returning to Calendar overview restored its independent fixture.
 - Maximum accessibility text size retained the compact review header; availability content scaled and could be scrolled. Standard text size was restored. Long band names use the current app's existing toolbar overflow menu.
 - The shared Simulator app repeatedly changed foreground windows during other app reviews, and coordinate-based tab-bar taps were unavailable. The middle tab was verified through the calendar setup shortcut and scenario entry points; direct bottom-tab tapping and the Settings shortcut still need a manual check.
-- Left Automatic availability visible. Screenshots: `.release/availability-tab/screenshots/calendar.png`, `availability.png`, and `accessibility.png`.
+- Left Automatic availability visible. Screenshots: `screenshots/iphone/light/1-iphone-light-calendar.png`, `availability.png`, and `accessibility.png`.
 
 
 ## Settings after the tab move
@@ -44,7 +44,7 @@ The mode choice now uses a large native segmented control. Connected users see o
 
 Mobbin references inspected: [Beside preferred hours](https://mobbin.com/screens/7c27d1e5-e5dc-4310-a583-decd5ed6cba1) for a focused hours editor with one explanation, and [Evernote calendar selection](https://mobbin.com/flows/7929a139-755b-4f9a-9d9f-c333b85d9c47) for putting calendar details on a separate screen. These inform the hierarchy; the controls remain native SwiftUI.
 
-Checked both automatic and manual layouts in the installed dark-mode mock preview. Calendar-source and practice-hour details opened; both automatic Save and a changed Tuesday manual schedule displayed “Availability saved.” Production preflight and both signed phone/unsigned simulator builds passed. Screenshot: `.release/availability-tab/screenshots/availability-compact-dark.png`. The signed normal-data build updates the existing Band Practice (L) installation on Keith’s iPhone, version 1.3.0 (8).
+Checked both automatic and manual layouts in the installed dark-mode mock preview. Calendar-source and practice-hour details opened; both automatic Save and a changed Tuesday manual schedule displayed “Availability saved.” Production preflight and both signed phone/unsigned simulator builds passed. Screenshot: `screenshots/iphone/dark/8-iphone-dark-availability-scrolled.png`. The signed normal-data build updates the existing Band Practice (L) installation on Keith’s iPhone, version 1.3.0 (8).
 
 ## Dedicated Band tab
 
@@ -52,7 +52,7 @@ Band now owns name/logo, the member list and member editor, invite code/sharing,
 
 Band and Band member mock scenarios enter the new tab as organizer and ordinary member. Organizer name/duration/minimum-member edits are simulated in memory and retained per scenario. Production service behavior is unchanged. This extraction retains the grouped native settings pattern used in the prior Mobbin review.
 
-Verification: 17 mock tests and 12 production tests passed; production unsigned Release preflight and signed phone build passed. In the installed mock simulator, Minimum Members was changed from three to two and retained after switching scenarios. Practice Duration and a member editor opened and returned; the band switcher opened and dismissed. The member scenario displayed a read-only band name and Leave Band, with organizer editing and scheduling controls hidden. Settings showed personal/app controls without band sections. The installed executable and debug library matched the tested build. Screenshot: `.release/availability-tab/screenshots/band-tab.png`.
+Verification: 17 mock tests and 12 production tests passed; production unsigned Release preflight and signed phone build passed. In the installed mock simulator, Minimum Members was changed from three to two and retained after switching scenarios. Practice Duration and a member editor opened and returned; the band switcher opened and dismissed. The member scenario displayed a read-only band name and Leave Band, with organizer editing and scheduling controls hidden. Settings showed personal/app controls without band sections. The installed executable and debug library matched the tested build. Screenshot: `screenshots/iphone/dark/11-iphone-dark-band.png`.
 
 Band was left visible in the dedicated Band Practice — Native UI simulator using mock data. Direct bottom-tab clicks remain unavailable through the shared Simulator computer-use coordinate bridge; scenario entry points exercised the actual tab views. The normal-data development build was installed in place and launched on Keith’s iPhone as Band Practice (L), version 1.3.0 (8).
 
@@ -62,10 +62,10 @@ Availability, Band, and Settings explicitly use native large navigation titles. 
 
 Inspected [Crouton Settings](https://mobbin.com/screens/69e986b1-7335-474c-b3cc-ed92d463ab2b) and [CLEAR App Settings](https://mobbin.com/screens/d920fbc5-34cd-4507-8c3f-4701ee3c72c1) in Mobbin for the large, leading-aligned heading above settings content.
 
-Production preflight passed with 12 tests and an unsigned Release build. The installed mock build matched its source artifact; Availability showed its large title before and after opening and returning from Practice hours. Screenshot: `.release/availability-tab/screenshots/availability-large-title.png`. Availability remains visible in the dedicated mock simulator.
+Production preflight passed with 12 tests and an unsigned Release build. The installed mock build matched its source artifact; Availability showed its large title before and after opening and returning from Practice hours. Screenshot: `screenshots/iphone/dark/8-iphone-dark-availability-manual.png`. Availability remains visible in the dedicated mock simulator.
 
 ## Automatic calendar introduction
 
 The user's selected option adds a native calendar Label, the heading “Availability from your calendar,” and a short explanation of checking personal calendars during practice hours and sharing availability without event details. It replaces the previous one-line Automatic footer; Manual retains its weekly-hours explanation. Existing native controls and the prior Mobbin-informed hierarchy remain.
 
-Production preflight passed (12 tests and unsigned Release). The installed mock artifact matched the new build. Reviewed Automatic, opened and returned from Calendars, switched to Manual and confirmed the introduction disappeared, and restored Automatic. At maximum accessibility text size the heading and paragraph wrapped, and scrolling reached the settings below. Normal text size was restored. Screenshot: `.release/availability-tab/screenshots/automatic-calendar-intro.png`. Automatic remains visible on the dedicated mock simulator.
+Production preflight passed (12 tests and unsigned Release). The installed mock artifact matched the new build. Reviewed Automatic, opened and returned from Calendars, switched to Manual and confirmed the introduction disappeared, and restored Automatic. At maximum accessibility text size the heading and paragraph wrapped, and scrolling reached the settings below. Normal text size was restored. Screenshot: `screenshots/iphone/dark/8-iphone-dark-availability-automatic.png`. Automatic remains visible on the dedicated mock simulator.
