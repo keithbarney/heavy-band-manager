@@ -37,6 +37,10 @@ HeavyBandManager/Secrets.swift
 *.swp
 *~.nib
 
+# Python script caches
+__pycache__/
+*.py[cod]
+
 # Misc
 *.moved-aside
 *.xccheckout
@@ -46,4 +50,6 @@ HeavyBandManager/Secrets.swift
 AuthKey_*.p8
 *.p8
 *.p12
+supabase/functions/.env
+supabase/functions/.env.*
 *.mobileprovision

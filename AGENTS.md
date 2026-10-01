@@ -15,6 +15,15 @@ This is a SwiftUI iOS app for coordinating band rehearsals. Application code is 
 
 Open the generated `.xcodeproj` in Xcode to run the app on an iPhone simulator or device.
 
+## Practice, calendar and push boundaries
+
+- `Services/BandManager.swift` owns practice coordination; `CalendarManager.swift` and `PracticeCalendarSync.swift` reconcile EventKit; `PracticePushManager.swift` handles registration/routing; `BackgroundSyncManager.swift` handles background refresh. `BandPracticeWidget/` and `Shared/` hold the widget and shared models. Preserve practice identity, per-member authorization and cross-band synchronization independently of the selected screen or availability mode.
+- Debug local calendars append ` (L)` to the customizable name. Read `docs/local-calendar-isolation.md`; keep guards on saved calendar/event identifiers, rename, recolor and deletion. Never clean production calendars as a local migration. `(L)` marks development separation and may still use iCloud.
+- `make preflight` uses the isolated CI bundle, not the normal local Debug bundle. Override `SIMULATOR_DESTINATION='platform=iOS Simulator,id=<saved-UDID>'` and `RELEASE_DIR=<task-output-directory>` for an isolated run. Check `LocalCalendarIsolationTests` under the actual local bundle too; denied permissions or skipped tests do not verify real EventKit behavior.
+- Read `docs/practice-push.md` before push/backend work. From the root, `node --experimental-strip-types --test supabase/functions/practice-push/index.node.test.mjs` validates mocked worker transport. `supabase db start` then `supabase test db supabase/tests/database/practice_push.test.sql` exercises the local database suite when its runtime is available. Report an unavailable runtime; a lightweight SQL harness is not full Supabase/RLS proof and production is not a substitute test database.
+- Keep schema migration, authenticated worker deployment, Vault/scheduler activation, compatible APNs topic/environment and device registration as separate rollout gates within the current authorized scope. Backend service-role/worker credentials never belong in the client. APNs acceptance and Simulator push injection do not prove physical receipt or calendar reconciliation; background execution is best-effort.
+- Handoff records exact configuration/bundle and destination, test failures/skips, installation result and version/build, backend activation state, and physical-device checks still needed. Confirm location/time/cancellation updates preserve event identity and reconcile across authorized members before claiming multi-device sync.
+
 ## Coding Style & Naming Conventions
 
 Use standard Swift formatting with four-space indentation, one declaration per line, and clear early returns. Name SwiftUI views, models, and services in `PascalCase`; properties, methods, and test methods in `camelCase`. Keep Figma-aligned screen names consistent with `figma-sync.md`. Never edit the generated `.xcodeproj` directly.
@@ -82,3 +91,7 @@ Apple screenshot specifications rechecked September 12, 2026: https://developer.
 - The current iPhone Light story has five cards, including the calendar overview and a combined availability benefit. Appearance (ID14) now compares the Band screen (native ID11) in Light and Dark, showing the logo and four photographed members. The Automatic screen supplies the single availability card, with Manual visible in the segmented control. All four delivered variants use this five-card Minor Threat story.
 - Day Detail uses the shared MemberAvatar view for member rows and matching-window avatars, so real uploaded member photos also display there.
 - The Apple Calendar card is an independently staged, simulator-local illustration named `Minor Threat Practice`, not evidence of cross-device sync or actual band rehearsals.
+
+## Feedback and user research
+
+Maintain parity with TV & Movie's categorized feedback and optional saved three-question survey. See `docs/feedback.md` for entry points, privacy/consent behavior, local invitation timing, mock isolation, and native test routes. Feedback forms and surveys remain excluded from the core marketing screenshot inventory unless explicitly requested.

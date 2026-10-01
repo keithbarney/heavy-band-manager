@@ -7,8 +7,8 @@
   "images": [
     {
       "file": "1-ipad-light-calendar.png",
-      "bytes": 285765,
-      "sha256": "c94792cc5e8c9507c9db8b1d540a5cc469a1be3e165bd9a4226252704f10b0f0",
+      "bytes": 286481,
+      "sha256": "73e6b46385cb001fda28370a41b88961c59954790ea5524f1d19dd9bed346a64",
       "width": 2064,
       "height": 2752,
       "format": "PNG",
@@ -17,8 +17,8 @@
     },
     {
       "file": "12-ipad-light-confirmation.png",
-      "bytes": 505248,
-      "sha256": "a4ca25935f35237c3591cb2d52a4c579ff69f64cb011d932608e4c0a26fb01fb",
+      "bytes": 503380,
+      "sha256": "b1c794758b9304bed178991003dabfd9dc3981f84ec9c944876e7a4abcea46b2",
       "width": 2064,
       "height": 2752,
       "format": "PNG",
@@ -37,8 +37,8 @@
     },
     {
       "file": "14-ipad-light-appearance.png",
-      "bytes": 343010,
-      "sha256": "4b2defb504f6bdfd7abde10f5a81db3fc46b520a4bc40187620200e18c90d168",
+      "bytes": 365663,
+      "sha256": "ccfe4e5d39d338ba8b74a87783e9045ca0df4879824b68cfc793126f58fa3fec",
       "width": 2064,
       "height": 2752,
       "format": "PNG",
@@ -47,8 +47,8 @@
     },
     {
       "file": "8-ipad-light-availability-automatic.png",
-      "bytes": 300415,
-      "sha256": "b4e44382450347a98fd77b567bbbda80fd4e2ba1907274018d9baaa99f062377",
+      "bytes": 300247,
+      "sha256": "7f7e11702b4ac30b757cd27b6d59bfc2a65162c20543d73616295ae852241bba",
       "width": 2064,
       "height": 2752,
       "format": "PNG",
@@ -56,33 +56,32 @@
       "errors": []
     }
   ],
-  "validatedAt": "2026-09-13T21:13:35.947845+00:00",
+  "validatedAt": "2026-09-15T06:51:08.833550+00:00",
   "requestedCombination": "ipad/light",
   "visualReview": {
     "passed": true,
+    "reviewer": "Codex",
     "hashes": {
-      "iphone/dark/1-iphone-dark-calendar.png": "437114ef1e357becb0b42336b5aa8d1ec4eef5f36089a278137b1f1e5afb0a5b",
-      "iphone/dark/12-iphone-dark-confirmation.png": "c740abdf9f3eacdd1329ecfe7885810bfc3c50ca66db5f00826b41f303d0386a",
+      "iphone/light/14-iphone-light-appearance.png": "450bdb6cf6e9328bee056a815e66d403021b7a9b5e0d8fc9e8873108574500d0",
+      "iphone/light/8-iphone-light-availability-automatic.png": "d4bcf0f039fe7848387ab8d7ca6f85add9bd6ab20c44f0d14180f6bed248412b",
+      "iphone/light/13-iphone-light-personal-calendar.png": "a86f92031e859b327365a70018316c1fe9faad59cecf208c3d0bb1451875d15c",
+      "iphone/light/1-iphone-light-calendar.png": "6e9f8fb1822f5b76b43fb9350fe45112b26e519224882cc97fcb34f1a4ffe4d0",
+      "iphone/light/12-iphone-light-confirmation.png": "1393eb93217fb0f8d6ab71abc8af73db4867bc934fac5ed183abfcc42907f42f",
+      "iphone/dark/12-iphone-dark-confirmation.png": "e06e41d8673c95385bd8afaf3fd0076ab53016d333f98e408234d977b5ae04a1",
+      "iphone/dark/1-iphone-dark-calendar.png": "027b178dfaa95f4686d0f27212a390d4a729a0466e2e73ef6d9d6b2bd68067aa",
+      "iphone/dark/8-iphone-dark-availability-automatic.png": "7f3e4659bc1a00d7718e78dbbe309284db5e9d7e904719a092c59cb3a32b22c1",
       "iphone/dark/13-iphone-dark-personal-calendar.png": "165a8d1ed670c2afb5fdd86f981f1e83e0dfe63cecb41b23a03d2a8ff17ed778",
-      "iphone/dark/8-iphone-dark-availability-automatic.png": "820bf8f0f843db13a72725923ce5ec7f5517bb9e2469a2076854831e4325e4f5",
-      "iphone/dark/14-iphone-dark-appearance.png": "f6e2ea7518443f6105413972853eadce8d1bdb1e9a0486937dc557a2240cf2be",
-      "ipad/light/1-ipad-light-calendar.png": "c94792cc5e8c9507c9db8b1d540a5cc469a1be3e165bd9a4226252704f10b0f0",
-      "ipad/light/12-ipad-light-confirmation.png": "a4ca25935f35237c3591cb2d52a4c579ff69f64cb011d932608e4c0a26fb01fb",
+      "iphone/dark/14-iphone-dark-appearance.png": "450bdb6cf6e9328bee056a815e66d403021b7a9b5e0d8fc9e8873108574500d0",
       "ipad/light/13-ipad-light-personal-calendar.png": "d2054f1fabf792b44195efaed24b53655d61bf21b00f169b938706af1c981c4b",
-      "ipad/light/8-ipad-light-availability-automatic.png": "b4e44382450347a98fd77b567bbbda80fd4e2ba1907274018d9baaa99f062377",
-      "ipad/light/14-ipad-light-appearance.png": "4b2defb504f6bdfd7abde10f5a81db3fc46b520a4bc40187620200e18c90d168",
-      "ipad/dark/1-ipad-dark-calendar.png": "3bb6b76b4805486ffebbd7e51a982b1087a3e3c6dc2a22e35dc1442f75946427",
-      "ipad/dark/12-ipad-dark-confirmation.png": "bec505f12954de226c4911eeed275a605a51350ab79806d0064a26a8cb834ac4",
+      "ipad/light/12-ipad-light-confirmation.png": "b1c794758b9304bed178991003dabfd9dc3981f84ec9c944876e7a4abcea46b2",
+      "ipad/light/14-ipad-light-appearance.png": "ccfe4e5d39d338ba8b74a87783e9045ca0df4879824b68cfc793126f58fa3fec",
+      "ipad/light/8-ipad-light-availability-automatic.png": "7f7e11702b4ac30b757cd27b6d59bfc2a65162c20543d73616295ae852241bba",
+      "ipad/light/1-ipad-light-calendar.png": "73e6b46385cb001fda28370a41b88961c59954790ea5524f1d19dd9bed346a64",
+      "ipad/dark/12-ipad-dark-confirmation.png": "ba97ecd6d5c3c889243fffb10695e73807cf4ee36c8a7420343aecf290dd0855",
       "ipad/dark/13-ipad-dark-personal-calendar.png": "9061fa54be2874c8ba9be88fdaa8288f83b81912bb03c19320391ad6900c2a00",
-      "ipad/dark/8-ipad-dark-availability-automatic.png": "0f3d3584bc3a0cd197b902351b95613f22b02b342fbce73fb3998fa5de170a8c",
-      "ipad/dark/14-ipad-dark-appearance.png": "4b2defb504f6bdfd7abde10f5a81db3fc46b520a4bc40187620200e18c90d168"
-    },
-    "notes": [
-      "Inspected all three remaining contact sheets and the native iPad Calendar/confirmation captures.",
-      "Five consistent benefits per set, approved two-line copy, mixed calendar dots and four scheduled practices, correct Minor Threat portraits/logo.",
-      "Apple Calendar shows three fictional local-only events in iPhone agenda and iPad agenda over Month view.",
-      "No mock header, scenario controls, wrong appearance, unintended placeholders, or return-to-app breadcrumbs.",
-      "iPhone Light preserves its approved image bytes and capture records."
-    ]
+      "ipad/dark/8-ipad-dark-availability-automatic.png": "d172f7dd6af90ae9e71bf251cd76148ca04bdcd296381cc44beaa9a25d07be1c",
+      "ipad/dark/1-ipad-dark-calendar.png": "dc628a357d1487d51db68bd6e0c1dc1974b0cf71b8fe167330e3ba7a65b88361",
+      "ipad/dark/14-ipad-dark-appearance.png": "ccfe4e5d39d338ba8b74a87783e9045ca0df4879824b68cfc793126f58fa3fec"
+    }
   }
 }

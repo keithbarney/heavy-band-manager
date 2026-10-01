@@ -7,8 +7,8 @@
   "images": [
     {
       "file": "1-iphone-light-calendar.png",
-      "bytes": 269891,
-      "sha256": "a26c793cad4a8554c3b0051066e28f7541991aab2c67a9ab489c99c7987703bf",
+      "bytes": 270319,
+      "sha256": "6e9f8fb1822f5b76b43fb9350fe45112b26e519224882cc97fcb34f1a4ffe4d0",
       "width": 1320,
       "height": 2868,
       "format": "PNG",
@@ -17,8 +17,8 @@
     },
     {
       "file": "12-iphone-light-confirmation.png",
-      "bytes": 466077,
-      "sha256": "66a50c51c48bac1502076b287ef1b38d211d670b08668c14b06bb481e3881274",
+      "bytes": 464935,
+      "sha256": "1393eb93217fb0f8d6ab71abc8af73db4867bc934fac5ed183abfcc42907f42f",
       "width": 1320,
       "height": 2868,
       "format": "PNG",
@@ -37,8 +37,8 @@
     },
     {
       "file": "14-iphone-light-appearance.png",
-      "bytes": 418781,
-      "sha256": "758d109da85cf359645e4887e00dc485419b5c58e8f1c5f94d5a49c901565852",
+      "bytes": 446685,
+      "sha256": "450bdb6cf6e9328bee056a815e66d403021b7a9b5e0d8fc9e8873108574500d0",
       "width": 1320,
       "height": 2868,
       "format": "PNG",
@@ -47,8 +47,8 @@
     },
     {
       "file": "8-iphone-light-availability-automatic.png",
-      "bytes": 293647,
-      "sha256": "fd6b9c870c98e3c70af5734f03e062f756f024d7d2a4061b510d33ec89215cc3",
+      "bytes": 292417,
+      "sha256": "d4bcf0f039fe7848387ab8d7ca6f85add9bd6ab20c44f0d14180f6bed248412b",
       "width": 1320,
       "height": 2868,
       "format": "PNG",
@@ -56,20 +56,32 @@
       "errors": []
     }
   ],
-  "validatedAt": "2026-09-13T20:53:24.337095+00:00",
+  "validatedAt": "2026-09-15T06:51:08.833550+00:00",
   "requestedCombination": "iphone/light",
   "visualReview": {
     "passed": true,
+    "reviewer": "Codex",
     "hashes": {
-      "iphone/light/1-iphone-light-calendar.png": "a26c793cad4a8554c3b0051066e28f7541991aab2c67a9ab489c99c7987703bf",
-      "iphone/light/12-iphone-light-confirmation.png": "66a50c51c48bac1502076b287ef1b38d211d670b08668c14b06bb481e3881274",
+      "iphone/light/14-iphone-light-appearance.png": "450bdb6cf6e9328bee056a815e66d403021b7a9b5e0d8fc9e8873108574500d0",
+      "iphone/light/8-iphone-light-availability-automatic.png": "d4bcf0f039fe7848387ab8d7ca6f85add9bd6ab20c44f0d14180f6bed248412b",
       "iphone/light/13-iphone-light-personal-calendar.png": "a86f92031e859b327365a70018316c1fe9faad59cecf208c3d0bb1451875d15c",
-      "iphone/light/8-iphone-light-availability-automatic.png": "fd6b9c870c98e3c70af5734f03e062f756f024d7d2a4061b510d33ec89215cc3",
-      "iphone/light/14-iphone-light-appearance.png": "758d109da85cf359645e4887e00dc485419b5c58e8f1c5f94d5a49c901565852"
-    },
-    "notes": [
-      "Inspected updated availability card at full size and five-card contact sheet.",
-      "Exact approved headline fits two lines at 102px with safe margins; native Automatic and Manual controls remain readable."
-    ]
+      "iphone/light/1-iphone-light-calendar.png": "6e9f8fb1822f5b76b43fb9350fe45112b26e519224882cc97fcb34f1a4ffe4d0",
+      "iphone/light/12-iphone-light-confirmation.png": "1393eb93217fb0f8d6ab71abc8af73db4867bc934fac5ed183abfcc42907f42f",
+      "iphone/dark/12-iphone-dark-confirmation.png": "e06e41d8673c95385bd8afaf3fd0076ab53016d333f98e408234d977b5ae04a1",
+      "iphone/dark/1-iphone-dark-calendar.png": "027b178dfaa95f4686d0f27212a390d4a729a0466e2e73ef6d9d6b2bd68067aa",
+      "iphone/dark/8-iphone-dark-availability-automatic.png": "7f3e4659bc1a00d7718e78dbbe309284db5e9d7e904719a092c59cb3a32b22c1",
+      "iphone/dark/13-iphone-dark-personal-calendar.png": "165a8d1ed670c2afb5fdd86f981f1e83e0dfe63cecb41b23a03d2a8ff17ed778",
+      "iphone/dark/14-iphone-dark-appearance.png": "450bdb6cf6e9328bee056a815e66d403021b7a9b5e0d8fc9e8873108574500d0",
+      "ipad/light/13-ipad-light-personal-calendar.png": "d2054f1fabf792b44195efaed24b53655d61bf21b00f169b938706af1c981c4b",
+      "ipad/light/12-ipad-light-confirmation.png": "b1c794758b9304bed178991003dabfd9dc3981f84ec9c944876e7a4abcea46b2",
+      "ipad/light/14-ipad-light-appearance.png": "ccfe4e5d39d338ba8b74a87783e9045ca0df4879824b68cfc793126f58fa3fec",
+      "ipad/light/8-ipad-light-availability-automatic.png": "7f7e11702b4ac30b757cd27b6d59bfc2a65162c20543d73616295ae852241bba",
+      "ipad/light/1-ipad-light-calendar.png": "73e6b46385cb001fda28370a41b88961c59954790ea5524f1d19dd9bed346a64",
+      "ipad/dark/12-ipad-dark-confirmation.png": "ba97ecd6d5c3c889243fffb10695e73807cf4ee36c8a7420343aecf290dd0855",
+      "ipad/dark/13-ipad-dark-personal-calendar.png": "9061fa54be2874c8ba9be88fdaa8288f83b81912bb03c19320391ad6900c2a00",
+      "ipad/dark/8-ipad-dark-availability-automatic.png": "d172f7dd6af90ae9e71bf251cd76148ca04bdcd296381cc44beaa9a25d07be1c",
+      "ipad/dark/1-ipad-dark-calendar.png": "dc628a357d1487d51db68bd6e0c1dc1974b0cf71b8fe167330e3ba7a65b88361",
+      "ipad/dark/14-ipad-dark-appearance.png": "ccfe4e5d39d338ba8b74a87783e9045ca0df4879824b68cfc793126f58fa3fec"
+    }
   }
 }

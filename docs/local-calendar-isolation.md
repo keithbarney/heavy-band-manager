@@ -1,0 +1,7 @@
+# Local calendar isolation — September 30, 2026
+
+Debug local bundle builds write to calendars marked `(L)`. Release builds retain their existing production calendar behavior. TV & Movie uses `TV & Movies (L)` and does not rename/adopt `ShowSync` or `TV & Movies` in a local build. Band Practice keeps its customizable band calendar name with ` (L)` appended, detaches legacy stored calendar/event references once, and rejects production-calendar identifiers during reuse, deletion, renaming and recoloring.
+
+Existing production calendars and events are preserved. Calendar permissions remain required. “Local” identifies the development app's separate calendar; its source may still be iCloud, so it does not promise device-only storage. Previously duplicated events are not automatically deleted. In Calendar, hide the `(L)` calendar when only production events should be visible.
+
+Validation: Full preflight passed: 29 tests passed and one local-identity integration test skipped under the CI bundle; unsigned Release device build passed. All three focused isolation tests then passed under the actual local bundle on the saved iPhone 17 Simulator, iOS 26.5, including rejection of a production event identifier and preservation of its event through local creation/deletion. Signed phone build is blocked: the local provisioning profile lacks Push Notifications and the aps-environment entitlement. Phone installation is pending.

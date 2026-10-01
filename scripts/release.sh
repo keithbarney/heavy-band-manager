@@ -267,7 +267,8 @@ preflight() {
     -scheme "$SCHEME" \
     -destination "${SIMULATOR_DESTINATION:-$DEFAULT_SIMULATOR_DESTINATION}" \
     -derivedDataPath "$RELEASE_DIR/DerivedData" \
-    PRODUCT_BUNDLE_IDENTIFIER=com.keithbarney.heavybandmanager.ci \
+    BAND_APP_BUNDLE_IDENTIFIER=com.keithbarney.heavybandmanager.ci \
+    BUNDLE_DISPLAY_NAME="Band Practice (CI)" \
     CODE_SIGNING_ALLOWED=NO
 
   xcodebuild build \
