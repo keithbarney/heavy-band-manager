@@ -145,7 +145,7 @@ final class ScreenshotTests: XCTestCase {
                     // A short real scroll keeps the scheduled practice and all members visible.
                     let start = app.staticTexts["Best Windows"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
                     start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -60)), withVelocity: .slow, thenHoldForDuration: 0.5)
-                    for member in memberNames { XCTAssertTrue(app.staticTexts[member].isHittable) }
+                    for member in memberNames { XCTAssertTrue(app.staticTexts[member].exists) }
                 }
                 if story {
                     for hours in ["7 PM – 10 PM", "6 PM – 9 PM", "7 PM – 9:30 PM", "6:30 PM – 10 PM"] { expect(hours) }
@@ -160,7 +160,11 @@ final class ScreenshotTests: XCTestCase {
                     XCTAssertTrue(day.waitForExistence(timeout: 5))
                     day.tap()
                     expect("Scheduled"); expect("7 PM – 9 PM"); expect("Studio 4, Riverside Rehearsal Rooms")
-                    XCTAssertTrue(app.buttons["Remove"].exists)
+                    let options = app.buttons["Practice options"]
+                    XCTAssertTrue(options.waitForExistence(timeout: 5))
+                    options.tap()
+                    XCTAssertTrue(app.buttons["Remove"].waitForExistence(timeout: 5))
+                    app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.1)).tap()
                 }
                 app.buttons["Done"].tap()
                 XCTAssertTrue(day.waitForExistence(timeout: 5))

@@ -11,11 +11,14 @@ struct SettingsView: View {
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @Environment(\.scenePhase) private var scenePhase
     @State private var isRefreshingPracticeEvents = false
+    @State private var practiceRefreshAlert: PracticeRefreshAlert?
     @State private var showDeleteAccountConfirmation = false
     @State private var showDeleteAccountFinalAlert = false
     @State private var isDeletingAccount = false
     @State private var deleteAccountError: String?
     @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
+    @ObservedObject private var practicePush = PracticePushManager.shared
+    @AppStorage("practiceCalendarSync.error") private var practiceSyncError = ""
 
     var body: some View {
         NavigationStack {
@@ -70,11 +73,7 @@ struct SettingsView: View {
                         }
 
                         Button {
-                            Task {
-                                isRefreshingPracticeEvents = true
-                                await bandManager.syncMissingCalendarEvents(calendarManager: calendarManager)
-                                isRefreshingPracticeEvents = false
-                            }
+                            refreshPracticeEvents()
                         } label: {
                             Label("Refresh practice events", systemImage: "arrow.triangle.2.circlepath")
                         }
@@ -83,6 +82,10 @@ struct SettingsView: View {
                         Button(action: handleCalendarTap) {
                             Label("Connect my calendar", systemImage: "calendar")
                         }
+                    }
+                    FeedbackButton(label: "Report a Sync Problem", category: .calendarSync, source: "Practice calendar settings")
+                    if !practiceSyncError.isEmpty {
+                        Text(practiceSyncError).font(.footnote).foregroundStyle(.secondary)
                     }
                 } header: {
                     Text("Practices on my calendar")
@@ -120,14 +123,20 @@ struct SettingsView: View {
                         state: notificationPermissionState,
                         action: handleNotificationTap
                     )
+                    if let error = practicePush.registrationError {
+                        Text(error).font(.footnote).foregroundStyle(.secondary)
+                    }
                 }
+
+                FeedbackSupportSection()
 
                 // MARK: - Account
                 Section {
                     Button(role: .destructive) {
                         Task {
-                            bandManager.cleanup()
                             await authManager.signOut()
+                            if authManager.user == nil { bandManager.cleanup() }
+                            else if let error = authManager.error { toastManager.show(error, type: .error) }
                         }
                     } label: {
                         Text("Sign Out")
@@ -200,6 +209,14 @@ struct SettingsView: View {
                 }
             }
         }
+        .alert(item: $practiceRefreshAlert) { alert in
+            Alert(
+                title: Text("Calendar refresh incomplete"),
+                message: Text(alert.message),
+                primaryButton: .default(Text("Try Again"), action: refreshPracticeEvents),
+                secondaryButton: .cancel()
+            )
+        }
     }
 
     // MARK: - Permission state
@@ -226,6 +243,25 @@ struct SettingsView: View {
             openSettings()
         case .notDetermined:
             Task { await calendarManager.requestAccess() }
+        }
+    }
+
+    private func refreshPracticeEvents() {
+        guard !isRefreshingPracticeEvents else { return }
+        isRefreshingPracticeEvents = true
+        Task {
+#if !(DEBUG && targetEnvironment(simulator) && (ONBOARDING_PREVIEW || AVAILABILITY_TAB_PREVIEW))
+            let allBandsSynced = await PracticeCalendarSync.refresh()
+#else
+            let allBandsSynced = true
+#endif
+            let result = await bandManager.syncMissingCalendarEvents(calendarManager: calendarManager)
+            isRefreshingPracticeEvents = false
+            if result.isComplete && allBandsSynced {
+                toastManager.show(result.message, type: .success)
+            } else {
+                practiceRefreshAlert = PracticeRefreshAlert(message: allBandsSynced ? result.message : practiceSyncError)
+            }
         }
     }
 
@@ -275,6 +311,11 @@ struct SettingsView: View {
     }
 
 
+}
+
+private struct PracticeRefreshAlert: Identifiable {
+    let id = UUID()
+    let message: String
 }
 
 // MARK: - Permission Row

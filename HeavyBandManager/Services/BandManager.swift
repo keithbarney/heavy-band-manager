@@ -71,6 +71,7 @@ final class BandManager: ObservableObject {
                 if loadedAuthoritativePractices {
                     onPracticeListChanged?()
                 }
+                Task { await PracticeWidgetSync.shared.refresh(force: true) }
                 return loadedAuthoritativePractices
             }
             return false
@@ -92,9 +93,11 @@ final class BandManager: ObservableObject {
             .execute()
             .value
 
+        guard Config.supabase.auth.currentUser?.id == userId else { throw CancellationError() }
         guard !myMemberships.isEmpty else {
             bands = []
             currentBand = nil
+            PracticeWidgetSync.shared.retainBands([], account: userId)
             return
         }
 
@@ -118,6 +121,8 @@ final class BandManager: ObservableObject {
 
         let membersByBand = Dictionary(grouping: fetchedMembers, by: \.bandId)
 
+        guard Config.supabase.auth.currentUser?.id == userId else { throw CancellationError() }
+
         let allBands = fetchedBands.map { band in
             BandWithMembers(
                 id: band.id,
@@ -136,6 +141,7 @@ final class BandManager: ObservableObject {
         }
 
         bands = allBands
+        PracticeWidgetSync.shared.retainBands(allBands, account: userId)
 
         // Restore last selected band, or pick the first one
         if let lastId = UUID(uuidString: lastBandId),
@@ -149,6 +155,7 @@ final class BandManager: ObservableObject {
     /// Refreshes just the current band's member list (for single-field updates).
     private func reloadCurrentBandMembers() async {
         guard let bandId = currentBand?.id else { return }
+        let account = try? currentUserId()
         do {
             let fetchedMembers: [BandMember] = try await Config.supabase
                 .from("band_members")
@@ -158,6 +165,10 @@ final class BandManager: ObservableObject {
                 .execute()
                 .value
 
+            guard currentBand?.id == bandId else { return }
+#if !(DEBUG && targetEnvironment(simulator) && (ONBOARDING_PREVIEW || AVAILABILITY_TAB_PREVIEW))
+            guard Config.supabase.auth.currentUser?.id == account else { return }
+#endif
             if var updated = currentBand {
                 updated = BandWithMembers(
                     id: updated.id, name: updated.name, creatorId: updated.creatorId,
@@ -179,6 +190,21 @@ final class BandManager: ObservableObject {
         }
     }
 
+    func preparePracticeRoute(_ route: PracticeRoute) async throws -> String {
+#if !(DEBUG && targetEnvironment(simulator) && (ONBOARDING_PREVIEW || AVAILABILITY_TAB_PREVIEW))
+        try await refreshBandList()
+#endif
+        guard let band = bands.first(where: { $0.id == route.bandID }) else { throw PracticeLocationError.unavailable }
+        await selectBand(band)
+#if !(DEBUG && targetEnvironment(simulator) && (ONBOARDING_PREVIEW || AVAILABILITY_TAB_PREVIEW))
+        guard await loadPractices() else { throw PracticeLocationError.unavailable }
+#endif
+        guard let practice = practices.first(where: { $0.id == route.practiceID && $0.bandId == route.bandID }) else {
+            throw PracticeLocationError.unavailable
+        }
+        return practice.date
+    }
+
     // MARK: - Switch Band
 
     func selectBand(_ band: BandWithMembers) async {
@@ -194,6 +220,14 @@ final class BandManager: ObservableObject {
         currentBand = band
         lastBandId = band.id.uuidString
 
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        if let cached = PracticeWidgetStore().read()?.bands.first(where: { $0.id == band.id }) {
+            practices = cached.practices.map { ScheduledPractice(id: $0.id, bandId: $0.bandId, date: $0.date,
+                startMinutes: $0.startMinutes, endMinutes: $0.endMinutes, location: $0.location,
+                scheduledBy: Self.onboardingPreviewUserId, scheduledAt: Date(), calendarEventId: nil) }
+        }
+        return
+#else
         async let slotsLoad: Void = loadSlots()
         async let practicesLoad = loadPractices()
         let (_, loadedAuthoritativePractices) = await (slotsLoad, practicesLoad)
@@ -201,6 +235,7 @@ final class BandManager: ObservableObject {
         if loadedAuthoritativePractices {
             onPracticeListChanged?()
         }
+#endif
     }
 
     func loadSlots(from startDate: String? = nil, to endDate: String? = nil) async {
@@ -276,44 +311,54 @@ final class BandManager: ObservableObject {
         projectOnboardingPreviewSlots()
         return
 #else
-
-        try await Config.supabase
-            .from("weekly_availability_rules")
-            .delete()
-            .eq("member_id", value: member.id.uuidString)
-            .eq("band_id", value: bandId.uuidString)
-            .execute()
-
-        let rows = validRanges.keys.sorted().compactMap { day -> [String: AnyJSON]? in
+        let account = try currentUserId()
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: Date())
+        let end = calendar.date(byAdding: .month, value: 6, to: start)!
+        let startString = TimeHelpers.dateString(from: start)
+        let endString = TimeHelpers.dateString(from: end)
+        let rulePayload = validRanges.keys.sorted().compactMap { day -> AnyJSON? in
             guard let range = validRanges[day] else { return nil }
-            return [
+            return .object([
                 "member_id": .string(member.id.uuidString),
                 "band_id": .string(bandId.uuidString),
                 "day_of_week": .integer(day),
                 "start_minutes": .integer(range.start),
                 "end_minutes": .integer(range.end),
-            ]
-        }
-        try await Config.supabase
-            .from("weekly_availability_rules")
-            .insert(rows)
-            .execute()
-
-        try await projectWeeklySlots(ranges: validRanges, member: member, bandId: bandId)
-        try await Config.supabase
-            .from("band_members")
-            .update([
-                "availability_mode": AnyJSON.string(AvailabilityMode.weekly.rawValue),
-                "availability_setup_complete": AnyJSON.bool(true),
             ])
-            .eq("id", value: member.id.uuidString)
+        }
+        let slotPayload = projectedWeeklySlotPayload(
+            ranges: validRanges, from: start, to: end
+        )
+        let params: [String: AnyJSON] = [
+                "p_member_id": .string(member.id.uuidString),
+                "p_band_id": .string(bandId.uuidString),
+                "p_expected_revision": .integer(member.availabilityRevision),
+                "p_start_date": .string(startString),
+                "p_end_date": .string(endString),
+                "p_rules": .array(rulePayload),
+                "p_slots": .array(slotPayload),
+            ]
+        let revision: Int = try await Config.supabase
+            .rpc("save_weekly_availability", params: params)
             .execute()
+            .value
+        guard Config.supabase.auth.currentUser?.id == account, currentBand?.id == bandId else { return }
+        applyAvailabilityState(
+            memberID: member.id,
+            bandID: bandId,
+            revision: revision,
+            mode: .weekly,
+            complete: true
+        )
         await reloadCurrentBandMembers()
         await loadWeeklyRules()
+        await loadSlots(from: startString, to: endString)
 #endif
     }
 
-    func setAvailabilityMode(_ mode: AvailabilityMode) async throws {
+    @discardableResult
+    func setAvailabilityMode(_ mode: AvailabilityMode) async throws -> Int {
 #if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
         if previewSaveFails {
             throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Simulated save failure. Your changes are kept. Turn off Simulate failed save to retry."])
@@ -324,64 +369,99 @@ final class BandManager: ObservableObject {
         }
 #if DEBUG && targetEnvironment(simulator) && (ONBOARDING_PREVIEW || AVAILABILITY_TAB_PREVIEW)
         updateOnboardingPreviewAvailability(mode, complete: true)
-        return
+        return currentMember?.availabilityRevision ?? (member.availabilityRevision + 1)
 #else
-        try await Config.supabase
-            .from("band_members")
-            .update([
-                "availability_mode": AnyJSON.string(mode.rawValue),
-                "availability_setup_complete": AnyJSON.bool(true),
-            ])
-            .eq("id", value: member.id.uuidString)
+        let bandId = member.bandId
+        let account = try currentUserId()
+        let params: [String: AnyJSON] = [
+                "p_member_id": .string(member.id.uuidString),
+                "p_band_id": .string(bandId.uuidString),
+                "p_expected_revision": .integer(member.availabilityRevision),
+                "p_mode": .string(mode.rawValue),
+            ]
+        let revision: Int = try await Config.supabase
+            .rpc("set_member_availability_mode", params: params)
             .execute()
+            .value
+        guard Config.supabase.auth.currentUser?.id == account, currentBand?.id == bandId else { return revision }
+        applyAvailabilityState(
+            memberID: member.id,
+            bandID: bandId,
+            revision: revision,
+            mode: mode,
+            complete: true
+        )
         await reloadCurrentBandMembers()
+        return revision
 #endif
     }
 
-    private func projectWeeklySlots(
+    private func projectedWeeklySlotPayload(
         ranges: [Int: (start: Int, end: Int)],
-        member: BandMember,
-        bandId: UUID
-    ) async throws {
+        from start: Date,
+        to end: Date
+    ) -> [AnyJSON] {
         let calendar = Calendar.current
-        let start = calendar.startOfDay(for: Date())
-        let end = calendar.date(byAdding: .month, value: 6, to: start)!
-        let startString = TimeHelpers.dateString(from: start)
-        let endString = TimeHelpers.dateString(from: end)
-
-        try await Config.supabase
-            .from("availability_slots")
-            .delete()
-            .eq("member_id", value: member.id.uuidString)
-            .eq("band_id", value: bandId.uuidString)
-            .gte("date", value: startString)
-            .lte("date", value: endString)
-            .execute()
-
-        var rows: [[String: AnyJSON]] = []
+        var rows: [AnyJSON] = []
         var date = start
         while date < end {
             let weekday = calendar.component(.weekday, from: date) - 1
             if let range = ranges[weekday] {
-                rows.append([
-                    "member_id": .string(member.id.uuidString),
-                    "band_id": .string(bandId.uuidString),
+                rows.append(.object([
                     "date": .string(TimeHelpers.dateString(from: date)),
                     "start_minutes": .integer(range.start),
                     "end_minutes": .integer(range.end),
-                    "confirmed": .bool(true),
-                ])
+                ]))
             }
             date = calendar.date(byAdding: .day, value: 1, to: date)!
         }
+        return rows
+    }
 
-        if !rows.isEmpty {
-            try await Config.supabase
-                .from("availability_slots")
-                .insert(rows)
-                .execute()
+    private func applyAvailabilityState(
+        memberID: UUID,
+        bandID: UUID,
+        revision: Int,
+        mode: AvailabilityMode? = nil,
+        complete: Bool? = nil,
+        windowStart: Int? = nil,
+        windowEnd: Int? = nil
+    ) {
+        guard let band = currentBand, band.id == bandID,
+              let member = band.bandMembers.first(where: { $0.id == memberID }) else { return }
+        let updatedMember = BandMember(
+            id: member.id,
+            bandId: member.bandId,
+            userId: member.userId,
+            name: member.name,
+            instrument: member.instrument,
+            color: member.color,
+            practiceWindowStart: windowStart ?? member.practiceWindowStart,
+            practiceWindowEnd: windowEnd ?? member.practiceWindowEnd,
+            avatarUrl: member.avatarUrl,
+            availabilityMode: mode ?? member.availabilityMode,
+            availabilitySetupComplete: complete ?? member.availabilitySetupComplete,
+            availabilityRevision: revision,
+            joinedAt: member.joinedAt
+        )
+        let updatedBand = BandWithMembers(
+            id: band.id,
+            name: band.name,
+            creatorId: band.creatorId,
+            leaderId: band.leaderId,
+            defaultPracticeLocation: band.defaultPracticeLocation,
+            inviteCode: band.inviteCode,
+            logoUrl: band.logoUrl,
+            createdAt: band.createdAt,
+            minPracticeMinutes: band.minPracticeMinutes,
+            maxPracticeMinutes: band.maxPracticeMinutes,
+            minMembersRequired: band.minMembersRequired,
+            bandMembers: band.bandMembers.map { $0.id == memberID ? updatedMember : $0 }
+        )
+        currentBand = updatedBand
+        if let index = bands.firstIndex(where: { $0.id == bandID }) {
+            bands[index] = updatedBand
         }
-        await loadSlots(from: startString, to: endString)
     }
 
     /// Returns true only for a successful, unfiltered snapshot of the band that
@@ -392,7 +472,7 @@ final class BandManager: ObservableObject {
         return false
 #else
         if SCREENSHOT_MODE { return false }
-        guard let bandId = currentBand?.id else { return false }
+        guard let bandId = currentBand?.id, let account = try? currentUserId() else { return false }
         let requestId = UUID()
         let isAuthoritativeRequest = startDate == nil && endDate == nil
         if isAuthoritativeRequest {
@@ -415,15 +495,27 @@ final class BandManager: ObservableObject {
                 query = query.lte("date", value: end)
             }
 
-            let fetchedPractices: [ScheduledPractice] = try await query.order("date").execute().value
+            let ordered = query.order("date").order("start_minutes").order("id")
+            var fetchedPractices: [ScheduledPractice] = []
+            var offset = 0
+            while true {
+                try Task.checkCancellation()
+                let page: [ScheduledPractice] = try await ordered.range(from: offset, to: offset + 499).execute().value
+                fetchedPractices += page
+                if page.count < 500 { break }
+                offset += page.count
+            }
             let isLatestRequest = isAuthoritativeRequest
                 ? authoritativePracticeLoadRequestId == requestId
                 : filteredPracticeLoadRequestId == requestId
-            guard isLatestRequest, currentBand?.id == bandId else { return false }
+            guard isLatestRequest, currentBand?.id == bandId, Config.supabase.auth.currentUser?.id == account else { return false }
             practices = fetchedPractices
             if isAuthoritativeRequest {
                 authoritativePracticeBandId = bandId
                 authoritativePractices = fetchedPractices
+                if let band = currentBand {
+                    PracticeWidgetSync.shared.publish(band: band, practices: fetchedPractices, account: account)
+                }
             }
             return isAuthoritativeRequest
         } catch {
@@ -498,22 +590,31 @@ final class BandManager: ObservableObject {
 
     // MARK: - Schedule Practice
 
-    func schedulePractice(date: String, startMinutes: Int, endMinutes: Int, location: String?, calendarManager: CalendarManager? = nil) async {
+    @discardableResult
+    func schedulePractice(date: String, startMinutes: Int, endMinutes: Int, location: String?, calendarManager: CalendarManager? = nil) async throws -> ScheduledPractice {
 #if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
-        guard let bandId = currentBand?.id else { return }
-        practices.append(ScheduledPractice(id: UUID(), bandId: bandId, date: date, startMinutes: startMinutes, endMinutes: endMinutes, location: location, scheduledBy: Self.onboardingPreviewUserId, scheduledAt: Date(), calendarEventId: nil))
-        return
+        guard !previewSaveFails else { throw PracticeMutationError.simulatedFailure }
+        guard let bandId = currentBand?.id else { throw PracticeMutationError.bandUnavailable }
+        guard !practices.contains(where: {
+            $0.bandId == bandId && $0.date == date && $0.startMinutes == startMinutes && $0.endMinutes == endMinutes
+        }) else { throw PracticeMutationError.duplicate }
+        let practice = ScheduledPractice(id: UUID(), bandId: bandId, date: date, startMinutes: startMinutes, endMinutes: endMinutes, location: location, scheduledBy: Self.onboardingPreviewUserId, scheduledAt: Date(), calendarEventId: nil)
+        practices.append(practice)
+        if WidgetReviewMode.isEnabled, let band = currentBand {
+            PracticeWidgetSync.shared.publish(band: band, practices: practices, account: Self.onboardingPreviewUserId)
+        }
+        return practice
 #else
-        guard let bandId = currentBand?.id else { return }
+        guard let bandId = currentBand?.id else { throw PracticeMutationError.bandUnavailable }
         let bandName = currentBand?.name ?? "Band"
-        let userId = try? currentUserId()
+        let userId = try currentUserId()
         let data: [String: AnyJSON] = [
             "band_id": .string(bandId.uuidString),
             "date": .string(date),
             "start_minutes": .integer(startMinutes),
             "end_minutes": .integer(endMinutes),
             "location": location.map { .string($0) } ?? .null,
-            "scheduled_by": .string(userId?.uuidString ?? ""),
+            "scheduled_by": .string(userId.uuidString),
         ]
         do {
             let practice: ScheduledPractice = try await Config.supabase
@@ -523,6 +624,11 @@ final class BandManager: ObservableObject {
                 .single()
                 .execute()
                 .value
+
+            guard Config.supabase.auth.currentUser?.id == userId, currentBand?.id == bandId else {
+                return practice
+            }
+            PracticeWidgetSync.shared.apply(practice, bandID: bandId, account: userId)
 
             // Create Apple Calendar event if calendar manager is available
             if let cm = calendarManager, let practiceDate = TimeHelpers.date(from: date) {
@@ -543,30 +649,41 @@ final class BandManager: ObservableObject {
             }
 
             await loadPractices()
+            return practice
+        } catch let postgrestError as PostgrestError where postgrestError.code == "23505" {
+            throw PracticeMutationError.duplicate
         } catch {
-            self.error = error.localizedDescription
+            throw error
         }
 #endif
     }
 
-    func cancelPractice(_ practiceId: UUID, calendarManager: CalendarManager? = nil) async {
+    func cancelPractice(_ practiceId: UUID, calendarManager: CalendarManager? = nil) async throws {
 #if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        guard !previewSaveFails else { throw PracticeMutationError.simulatedFailure }
+        guard practices.contains(where: { $0.id == practiceId }) else { throw PracticeMutationError.practiceUnavailable }
         practices.removeAll { $0.id == practiceId }
-        return
-#else
-        do {
-            try await Config.supabase
-                .from("scheduled_practices")
-                .delete()
-                .eq("id", value: practiceId.uuidString)
-                .execute()
-            if let cm = calendarManager {
-                try? await cm.deletePracticeEvent(practiceId: practiceId)
-            }
-            await loadPractices()
-        } catch {
-            self.error = error.localizedDescription
+        if WidgetReviewMode.isEnabled, let band = currentBand {
+            PracticeWidgetSync.shared.publish(band: band, practices: practices, account: Self.onboardingPreviewUserId)
         }
+#else
+        guard let bandID = currentBand?.id else { throw PracticeMutationError.bandUnavailable }
+        let account = try currentUserId()
+        let _: ScheduledPractice = try await Config.supabase
+            .from("scheduled_practices")
+            .delete()
+            .eq("id", value: practiceId.uuidString)
+            .eq("band_id", value: bandID.uuidString)
+            .select()
+            .single()
+            .execute()
+            .value
+        guard Config.supabase.auth.currentUser?.id == account, currentBand?.id == bandID else { return }
+        PracticeWidgetSync.shared.apply(nil, removing: practiceId, bandID: bandID, account: account)
+        if let cm = calendarManager {
+            try? await cm.deletePracticeEvent(practiceId: practiceId)
+        }
+        await loadPractices()
 #endif
     }
 
@@ -577,14 +694,24 @@ final class BandManager: ObservableObject {
     func syncMissingCalendarEvents(
         calendarManager: CalendarManager,
         reconcileStaleEvents: Bool = false
-    ) async {
+    ) async -> PracticeCalendarSyncResult {
 #if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
-        return
+        let attempted = practices.count
+        if previewSaveFails {
+            let restored = attempted > 1 ? attempted - 1 : 0
+            return PracticeCalendarSyncResult(attempted: attempted, restored: restored, failed: max(attempted - restored, 1), staleCleanupFailed: false)
+        }
+        return PracticeCalendarSyncResult(attempted: attempted, restored: attempted, failed: 0, staleCleanupFailed: false)
 #else
-        guard let band = currentBand else { return }
-        guard calendarManager.isAuthorized else { return }
+        guard let band = currentBand else {
+            return PracticeCalendarSyncResult(attempted: 0, restored: 0, failed: 1, staleCleanupFailed: false)
+        }
+        guard calendarManager.isAuthorized else {
+            return PracticeCalendarSyncResult(attempted: 0, restored: 0, failed: 1, staleCleanupFailed: false)
+        }
 
         let practicesForSync: [ScheduledPractice]
+        var staleCleanupFailed = false
         if reconcileStaleEvents, authoritativePracticeBandId == band.id {
             practicesForSync = authoritativePractices
             do {
@@ -593,14 +720,20 @@ final class BandManager: ObservableObject {
                     activePracticeIds: Set(practicesForSync.map(\.id))
                 )
             } catch {
+                staleCleanupFailed = true
                 print("Failed to remove stale calendar events: \(error.localizedDescription)")
             }
         } else {
             practicesForSync = practices
         }
 
+        var restored = 0
+        var failed = 0
         for practice in practicesForSync {
-            guard let practiceDate = TimeHelpers.date(from: practice.date) else { continue }
+            guard let practiceDate = TimeHelpers.date(from: practice.date) else {
+                failed += 1
+                continue
+            }
             do {
                 _ = try await calendarManager.createPracticeEvent(
                     practiceId: practice.id,
@@ -612,18 +745,29 @@ final class BandManager: ObservableObject {
                     bandName: band.name,
                     location: practice.location
                 )
+                restored += 1
             } catch {
+                failed += 1
                 print("Failed to sync calendar event for practice \(practice.id): \(error.localizedDescription)")
             }
         }
+        return PracticeCalendarSyncResult(
+            attempted: practicesForSync.count,
+            restored: restored,
+            failed: failed,
+            staleCleanupFailed: staleCleanupFailed
+        )
 #endif
     }
 
     // MARK: - Calendar Sync
 
-    func syncCalendar(calendarManager: CalendarManager, from startDate: Date, to endDate: Date) async {
-        guard let member = currentMember, let bandId = currentBand?.id else { return }
-        guard member.availabilityMode == .calendar else { return }
+    @discardableResult
+    func syncCalendar(calendarManager: CalendarManager, from startDate: Date, to endDate: Date) async throws -> Bool {
+        guard let member = currentMember, let bandId = currentBand?.id else {
+            throw AvailabilityMutationError.membershipUnavailable
+        }
+        guard member.availabilityMode == .calendar else { return false }
 
         let events = calendarManager.getEvents(from: startDate, to: endDate)
         let newSlots = calendarManager.invertEventsToSlots(
@@ -636,55 +780,57 @@ final class BandManager: ObservableObject {
         )
 
 #if DEBUG && targetEnvironment(simulator) && (ONBOARDING_PREVIEW || AVAILABILITY_TAB_PREVIEW)
+        #if AVAILABILITY_TAB_PREVIEW
+        if previewSaveFails { throw AvailabilityMutationError.simulatedFailure }
+        #endif
         slots.removeAll { $0.memberId == member.id }
         slots += newSlots.map {
             AvailabilitySlot(id: UUID(), memberId: member.id, bandId: bandId,
                              date: $0.date, startMinutes: $0.startMinutes,
                              endMinutes: $0.endMinutes, confirmed: true)
         }
+        updateOnboardingPreviewAvailability(.calendar, complete: true)
         calendarManager.lastSyncDate = Date()
-        return
+        return true
 #else
 
         let startStr = TimeHelpers.dateString(from: startDate)
         let endStr = TimeHelpers.dateString(from: endDate)
 
-        do {
-            // Delete existing slots for this member in the date range
-            try await Config.supabase
-                .from("availability_slots")
-                .delete()
-                .eq("member_id", value: member.id.uuidString)
-                .eq("band_id", value: bandId.uuidString)
-                .gte("date", value: startStr)
-                .lte("date", value: endStr)
-                .execute()
-
-            // Insert new slots in a single batch
-            if !newSlots.isEmpty {
-                let rows: [[String: AnyJSON]] = newSlots.map { slot in
-                    [
-                        "member_id": .string(member.id.uuidString),
-                        "band_id": .string(bandId.uuidString),
-                        "date": .string(slot.date),
-                        "start_minutes": .integer(slot.startMinutes),
-                        "end_minutes": .integer(slot.endMinutes),
-                        "confirmed": .bool(true),
-                    ]
-                }
-                try await Config.supabase
-                    .from("availability_slots")
-                    .insert(rows)
-                    .execute()
-            }
-
-            calendarManager.lastSyncDate = Date()
-            calendarManager.savePrefs()
-            await loadSlots(from: startStr, to: endStr)
-        } catch {
-            self.error = error.localizedDescription
-            print("Sync error: \(error)")
+        let payload = newSlots.map { slot in
+            AnyJSON.object([
+                "date": .string(slot.date),
+                "start_minutes": .integer(slot.startMinutes),
+                "end_minutes": .integer(slot.endMinutes),
+            ])
         }
+        let account = try currentUserId()
+        let params: [String: AnyJSON] = [
+                "p_member_id": .string(member.id.uuidString),
+                "p_band_id": .string(bandId.uuidString),
+                "p_expected_revision": .integer(member.availabilityRevision),
+                "p_start_date": .string(startStr),
+                "p_end_date": .string(endStr),
+                "p_slots": .array(payload),
+            ]
+        let revision: Int? = try await Config.supabase
+            .rpc("replace_calendar_availability", params: params)
+            .execute()
+            .value
+        guard let revision else { throw AvailabilityMutationError.staleRevision }
+        guard Config.supabase.auth.currentUser?.id == account, currentBand?.id == bandId else { return true }
+        applyAvailabilityState(
+            memberID: member.id,
+            bandID: bandId,
+            revision: revision,
+            mode: .calendar,
+            complete: true
+        )
+        calendarManager.lastSyncDate = Date()
+        calendarManager.savePrefs()
+        await reloadCurrentBandMembers()
+        await loadSlots(from: startStr, to: endStr)
+        return true
 #endif
     }
 
@@ -810,6 +956,14 @@ final class BandManager: ObservableObject {
 
     func leaveBand() async {
         guard let member = currentMember else { return }
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        bands.removeAll { $0.id == member.bandId }
+        currentBand = bands.first
+        slots.removeAll { $0.bandId == member.bandId }
+        practices.removeAll { $0.bandId == member.bandId }
+        weeklyRules.removeAll { $0.bandId == member.bandId }
+        return
+#else
         do {
             let userId = try currentUserId()
             try await Config.supabase
@@ -823,11 +977,21 @@ final class BandManager: ObservableObject {
         } catch {
             self.error = "Leave band error: \(error.localizedDescription)"
         }
+#endif
     }
 
     func deleteBand() async {
         guard let band = currentBand, isLeader else { return }
         let bandName = band.name
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        bands.removeAll { $0.id == band.id }
+        currentBand = bands.first
+        slots.removeAll { $0.bandId == band.id }
+        practices.removeAll { $0.bandId == band.id }
+        weeklyRules.removeAll { $0.bandId == band.id }
+        onBandDeleted?(bandName)
+        return
+#else
         do {
             try await Config.supabase
                 .rpc("delete_band", params: ["p_band_id": AnyJSON.string(band.id.uuidString)])
@@ -838,6 +1002,7 @@ final class BandManager: ObservableObject {
         } catch {
             self.error = "Delete band error: \(error.localizedDescription)"
         }
+#endif
     }
 
     func cleanup() {
@@ -855,6 +1020,15 @@ final class BandManager: ObservableObject {
 
     func uploadAvatar(imageData: Data) async {
         guard let member = currentMember else { return }
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        let reference = "mock-upload://avatar/\(member.id.uuidString)"
+        guard MockReviewImageStore.store(imageData, for: reference) else {
+            self.error = "Choose a valid photo and try again."
+            return
+        }
+        updateReviewMember(member.id, avatarURL: reference)
+        return
+#else
         let path = "\(member.id.uuidString).jpg"
 
         do {
@@ -880,6 +1054,7 @@ final class BandManager: ObservableObject {
             self.error = error.localizedDescription
             print("Avatar upload error: \(error)")
         }
+#endif
     }
 
     // MARK: - Practice Window
@@ -895,17 +1070,35 @@ final class BandManager: ObservableObject {
         }
         updateOnboardingPreviewAvailability(member.availabilityMode, complete: member.availabilitySetupComplete, windowStart: start, windowEnd: end)
 #else
-        try await Config.supabase
-            .from("band_members")
-            .update(["practice_window_start": AnyJSON.integer(start), "practice_window_end": AnyJSON.integer(end)])
-            .eq("id", value: member.id.uuidString)
+        let account = try currentUserId()
+        let params: [String: AnyJSON] = [
+                "p_member_id": .string(member.id.uuidString),
+                "p_band_id": .string(member.bandId.uuidString),
+                "p_expected_revision": .integer(member.availabilityRevision),
+                "p_start_minutes": .integer(start),
+                "p_end_minutes": .integer(end),
+            ]
+        let revision: Int = try await Config.supabase
+            .rpc("update_member_practice_window", params: params)
             .execute()
+            .value
+        guard Config.supabase.auth.currentUser?.id == account, currentBand?.id == member.bandId else { return }
+        applyAvailabilityState(
+            memberID: member.id,
+            bandID: member.bandId,
+            revision: revision,
+            windowStart: start,
+            windowEnd: end
+        )
         await reloadCurrentBandMembers()
 #endif
     }
 
     func updateMemberName(_ name: String) async {
         guard let member = currentMember, !name.isEmpty else { return }
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        updateReviewMember(member.id, name: name)
+#else
         do {
             try await Config.supabase
                 .from("band_members")
@@ -914,11 +1107,16 @@ final class BandManager: ObservableObject {
                 .execute()
             await reloadCurrentBandMembers()
         } catch { print("Update name error: \(error)") }
+#endif
     }
 
     func updateMemberInstrument(_ instrument: String, memberId: UUID? = nil) async {
         let targetId = memberId ?? currentMember?.id
         guard let id = targetId else { return }
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        guard id == currentMember?.id || isLeader else { return }
+        updateReviewMember(id, instrument: instrument)
+#else
         do {
             try await Config.supabase
                 .rpc(
@@ -931,6 +1129,7 @@ final class BandManager: ObservableObject {
                 .execute()
             await reloadCurrentBandMembers()
         } catch { print("Update instrument error: \(error)") }
+#endif
     }
 
     func updateBandName(_ name: String) async {
@@ -949,16 +1148,75 @@ final class BandManager: ObservableObject {
 #endif
     }
 
+    func setDefaultPracticeLocation(_ location: String) async throws {
+        guard let band = currentBand, isLeader else { throw PracticeLocationError.notLeader }
+        let value = location.trimmingCharacters(in: .whitespacesAndNewlines)
+#if DEBUG && targetEnvironment(simulator) && (ONBOARDING_PREVIEW || AVAILABILITY_TAB_PREVIEW)
+        #if AVAILABILITY_TAB_PREVIEW
+        guard !previewSaveFails else { throw PracticeLocationError.simulatedFailure }
+        #endif
+#else
+        guard !SCREENSHOT_MODE else { return }
+        let account = try currentUserId()
+        let _: Band = try await Config.supabase.from("bands")
+            .update(["default_practice_location": AnyJSON.string(value)])
+            .eq("id", value: band.id.uuidString).select().single().execute().value
+        guard Config.supabase.auth.currentUser?.id == account else { return }
+#endif
+        let updated = BandWithMembers(id: band.id, name: band.name, creatorId: band.creatorId,
+            leaderId: band.leaderId, defaultPracticeLocation: value, inviteCode: band.inviteCode,
+            logoUrl: band.logoUrl, createdAt: band.createdAt, minPracticeMinutes: band.minPracticeMinutes,
+            maxPracticeMinutes: band.maxPracticeMinutes, minMembersRequired: band.minMembersRequired,
+            bandMembers: band.bandMembers)
+        if currentBand?.id == band.id { currentBand = updated }
+        if let index = bands.firstIndex(where: { $0.id == band.id }) { bands[index] = updated }
+    }
+
+    /// Compatibility for the existing create-band flow; editors use the throwing API.
     func updatePracticeLocation(_ location: String) async {
-        guard let band = currentBand, isLeader else { return }
+        do { try await setDefaultPracticeLocation(location) }
+        catch { self.error = error.localizedDescription }
+    }
+
+    /// Returns a calendar warning separately: the shared practice may already be saved.
+    func setPracticeLocation(_ practice: ScheduledPractice, location: String, calendarManager: CalendarManager) async throws -> String? {
+        guard let band = currentBand, band.id == practice.bandId, isLeader else { throw PracticeLocationError.notLeader }
+        let value = location.trimmingCharacters(in: .whitespacesAndNewlines)
+        let account = try currentUserId()
+        let updated: ScheduledPractice
+#if DEBUG && targetEnvironment(simulator) && (ONBOARDING_PREVIEW || AVAILABILITY_TAB_PREVIEW)
+        #if AVAILABILITY_TAB_PREVIEW
+        guard !previewSaveFails else { throw PracticeLocationError.simulatedFailure }
+        #endif
+        guard practices.contains(where: { $0.id == practice.id }) else { throw PracticeLocationError.unavailable }
+        updated = ScheduledPractice(id: practice.id, bandId: practice.bandId, date: practice.date,
+            startMinutes: practice.startMinutes, endMinutes: practice.endMinutes, location: value,
+            scheduledBy: practice.scheduledBy, scheduledAt: practice.scheduledAt, calendarEventId: practice.calendarEventId)
+#else
+        guard !SCREENSHOT_MODE else { return nil }
+        updated = try await Config.supabase.from("scheduled_practices")
+            .update(["location": AnyJSON.string(value)])
+            .eq("id", value: practice.id.uuidString).eq("band_id", value: band.id.uuidString)
+            .select().single().execute().value
+        guard Config.supabase.auth.currentUser?.id == account else { return nil }
+#endif
+        if currentBand?.id == band.id {
+            if let index = practices.firstIndex(where: { $0.id == updated.id }) { practices[index] = updated }
+            if let index = authoritativePractices.firstIndex(where: { $0.id == updated.id }) { authoritativePractices[index] = updated }
+        }
+        PracticeWidgetSync.shared.apply(updated, bandID: band.id, account: account)
+        guard calendarManager.isAuthorized else {
+            return "Location saved. Allow calendar access to update your personal calendar."
+        }
         do {
-            try await Config.supabase
-                .from("bands")
-                .update(["default_practice_location": AnyJSON.string(location)])
-                .eq("id", value: band.id.uuidString)
-                .execute()
-            try? await refreshBandList()
-        } catch { print("Update practice location error: \(error)") }
+            guard let date = TimeHelpers.date(from: updated.date) else { throw CalendarError.invalidDate }
+            _ = try await calendarManager.createPracticeEvent(practiceId: updated.id, bandId: band.id,
+                legacyEventIdentifier: updated.calendarEventId, date: date, startMinutes: updated.startMinutes,
+                endMinutes: updated.endMinutes, bandName: band.name, location: updated.location)
+            return nil
+        } catch {
+            return "Location saved. Your personal calendar could not update; it will retry when practices refresh."
+        }
     }
 
     func updateMinMembersRequired(_ count: Int) async {
@@ -998,6 +1256,15 @@ final class BandManager: ObservableObject {
 
     func uploadBandLogo(imageData: Data) async {
         guard let band = currentBand, isLeader else { return }
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        let reference = "mock-upload://logo/\(band.id.uuidString)"
+        guard MockReviewImageStore.store(imageData, for: reference) else {
+            self.error = "Choose a valid logo image and try again."
+            return
+        }
+        updateReviewBand(logoURL: reference)
+        return
+#else
         let path = "bands/\(band.id.uuidString)/logo.jpg"
         do {
             try await Config.supabase.storage
@@ -1013,6 +1280,7 @@ final class BandManager: ObservableObject {
                 .execute()
             try? await refreshBandList()
         } catch { print("Upload band logo error: \(error)") }
+#endif
     }
 
     // MARK: - Mock Data (for screenshots)
@@ -1143,5 +1411,75 @@ extension Color {
         let gi = Int((g * 255).rounded())
         let bi = Int((b * 255).rounded())
         return String(format: "#%02X%02X%02X", ri, gi, bi)
+    }
+}
+
+enum PracticeLocationError: LocalizedError {
+    case notLeader, unavailable, simulatedFailure
+    var errorDescription: String? {
+        switch self {
+        case .notLeader: return "Only the band leader can change practice locations."
+        case .unavailable: return "This practice is no longer available."
+        case .simulatedFailure: return "The location could not be saved. Try again."
+        }
+    }
+}
+
+enum AvailabilityMutationError: LocalizedError {
+    case membershipUnavailable
+    case staleRevision
+    case simulatedFailure
+
+    var errorDescription: String? {
+        switch self {
+        case .membershipUnavailable:
+            return "Your band profile could not be loaded. Reload and try again."
+        case .staleRevision:
+            return "Your availability changed on another device. Reload it before trying again."
+        case .simulatedFailure:
+            return "Simulated sync failure. Your previous availability is still published."
+        }
+    }
+}
+
+enum PracticeMutationError: LocalizedError {
+    case bandUnavailable
+    case practiceUnavailable
+    case duplicate
+    case simulatedFailure
+
+    var errorDescription: String? {
+        switch self {
+        case .bandUnavailable:
+            return "The band could not be loaded. Reload and try again."
+        case .practiceUnavailable:
+            return "That practice is no longer available. Refresh the calendar and try again."
+        case .duplicate:
+            return "That practice is already scheduled."
+        case .simulatedFailure:
+            return "Simulated backend failure. No practice was changed."
+        }
+    }
+}
+
+struct PracticeCalendarSyncResult: Equatable {
+    let attempted: Int
+    let restored: Int
+    let failed: Int
+    let staleCleanupFailed: Bool
+
+    var isComplete: Bool { failed == 0 && !staleCleanupFailed }
+
+    var message: String {
+        if isComplete {
+            return attempted == 0
+                ? "No scheduled practices need refreshing."
+                : "Refreshed \(restored) practice event\(restored == 1 ? "" : "s")."
+        }
+        if restored > 0 {
+            let remaining = failed + (staleCleanupFailed ? 1 : 0)
+            return "Refreshed \(restored) of \(attempted) practice events. \(remaining) calendar update\(remaining == 1 ? "" : "s") could not finish."
+        }
+        return "Practice events could not be refreshed. Check Calendar access and try again."
     }
 }

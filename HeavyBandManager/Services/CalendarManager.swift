@@ -9,7 +9,21 @@ final class CalendarManager: ObservableObject {
     @Published var deviceCalendars: [DeviceCalendar] = []
     @Published var selectedCalendarIds: Set<String> = []
     @Published var lastSyncDate: Date?
-    @Published var practiceCalendarName = "Band Practice"
+    #if DEBUG
+    static let isLocalBuild = Bundle.main.bundleIdentifier == "com.keithbarney.heavybandmanager.local"
+    #else
+    static let isLocalBuild = false
+    #endif
+
+    static func calendarName(_ name: String, isLocalBuild: Bool) -> String {
+        isLocalBuild && !name.hasSuffix(" (L)") ? name + " (L)" : name
+    }
+
+    static func canAccessCalendar(title: String?, isLocalBuild: Bool) -> Bool {
+        !isLocalBuild || title?.hasSuffix(" (L)") == true
+    }
+
+    @Published var practiceCalendarName = CalendarManager.calendarName("Band Practice", isLocalBuild: CalendarManager.isLocalBuild)
     @Published var practiceCalendarColor: Color = .blue
     @Published var autoSync = true
 
@@ -27,7 +41,13 @@ final class CalendarManager: ObservableObject {
 
     private var practiceCalendarIdentifier: String?
     private var practiceEventRegistry = PracticeEventRegistry()
-    private let store = EKEventStore()
+    private let store: EKEventStore
+    private let preferences: UserDefaults
+
+    init(eventStore: EKEventStore = EKEventStore(), preferences: UserDefaults = .standard) {
+        self.store = eventStore
+        self.preferences = preferences
+    }
     private let prefsKey = CalendarPreferenceKeys.preferences
 
     struct DeviceCalendar: Identifiable {
@@ -247,14 +267,17 @@ final class CalendarManager: ObservableObject {
 #else
         // Look up by stored identifier first (survives renames)
         if let id = practiceCalendarIdentifier,
-           let existing = store.calendar(withIdentifier: id) {
+           let existing = store.calendar(withIdentifier: id),
+           Self.canAccessCalendar(title: existing.title, isLocalBuild: Self.isLocalBuild) {
             return existing
         }
 
         // First-run: default name to "<Band> Practice" if user hasn't picked one
-        if practiceCalendarName == "Band Practice", let bandName, !bandName.isEmpty {
-            practiceCalendarName = "\(bandName) Practice"
+        if practiceCalendarName == Self.calendarName("Band Practice", isLocalBuild: Self.isLocalBuild), let bandName, !bandName.isEmpty {
+            practiceCalendarName = Self.calendarName("\(bandName) Practice", isLocalBuild: Self.isLocalBuild)
         }
+
+        practiceCalendarName = Self.calendarName(practiceCalendarName, isLocalBuild: Self.isLocalBuild)
 
         // Fall back to title match (legacy installs)
         if let existing = store.calendars(for: .event).first(where: { $0.title == practiceCalendarName }) {
@@ -290,10 +313,11 @@ final class CalendarManager: ObservableObject {
 #else
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        practiceCalendarName = trimmed
+        practiceCalendarName = Self.calendarName(trimmed, isLocalBuild: Self.isLocalBuild)
         if let id = practiceCalendarIdentifier,
-           let cal = store.calendar(withIdentifier: id) {
-            cal.title = trimmed
+           let cal = store.calendar(withIdentifier: id),
+           Self.canAccessCalendar(title: cal.title, isLocalBuild: Self.isLocalBuild) {
+            cal.title = practiceCalendarName
             try? store.saveCalendar(cal, commit: true)
         }
         savePrefs()
@@ -307,7 +331,8 @@ final class CalendarManager: ObservableObject {
 #else
         practiceCalendarColor = color
         if let id = practiceCalendarIdentifier,
-           let cal = store.calendar(withIdentifier: id) {
+           let cal = store.calendar(withIdentifier: id),
+           Self.canAccessCalendar(title: cal.title, isLocalBuild: Self.isLocalBuild) {
             cal.cgColor = UIColor(color).cgColor
             try? store.saveCalendar(cal, commit: true)
         }
@@ -337,20 +362,18 @@ final class CalendarManager: ObservableObject {
             throw CalendarError.accessDenied
         }
 
-        if let existingIdentifier = practiceEventIdentifier(
+        let existingIdentifier = practiceEventIdentifier(
             for: practiceId,
             bandId: bandId,
             legacyEventIdentifier: legacyEventIdentifier
-        ) {
-            return existingIdentifier
+        )
+        let existing = existingIdentifier.flatMap { store.event(withIdentifier: $0) }
+        let event = existing ?? EKEvent(eventStore: store)
+        if existing == nil {
+            event.calendar = try getOrCreateBandCalendar(bandName: bandName)
+            event.addAlarm(EKAlarm(relativeOffset: -30 * 60))
         }
-
-        let calendar = try getOrCreateBandCalendar(bandName: bandName)
-
-        let event = EKEvent(eventStore: store)
-        event.title = "\(bandName) Practice"
-        event.calendar = calendar
-        event.location = location
+        let original = PracticeCalendarFields(event: event)
 
         let cal = Calendar.current
         var startComps = cal.dateComponents([.year, .month, .day], from: date)
@@ -359,7 +382,6 @@ final class CalendarManager: ObservableObject {
         guard let startDate = cal.date(from: startComps) else {
             throw CalendarError.invalidDate
         }
-        event.startDate = startDate
 
         var endComps = startComps
         endComps.hour = endMinutes / 60
@@ -367,12 +389,11 @@ final class CalendarManager: ObservableObject {
         guard let endDate = cal.date(from: endComps) else {
             throw CalendarError.invalidDate
         }
-        event.endDate = endDate
-
-        // 30-minute reminder before the event
-        event.addAlarm(EKAlarm(relativeOffset: -30 * 60))
-
-        try store.save(event, span: .thisEvent)
+        let desired = PracticeCalendarFields(title: "\(bandName) Practice", location: location, start: startDate, end: endDate)
+        if existing == nil || original != desired {
+            desired.apply(to: event)
+            try store.save(event, span: .thisEvent)
+        }
         guard let identifier = event.eventIdentifier else {
             throw CalendarError.eventIdentifierUnavailable
         }
@@ -394,7 +415,8 @@ final class CalendarManager: ObservableObject {
             throw CalendarError.accessDenied
         }
         guard let eventIdentifier = practiceEventRegistry.identifier(for: practiceId) else { return }
-        if let event = store.event(withIdentifier: eventIdentifier) {
+        if let event = store.event(withIdentifier: eventIdentifier),
+           Self.canAccessCalendar(title: event.calendar?.title, isLocalBuild: Self.isLocalBuild) {
             try store.remove(event, span: .thisEvent)
         }
         practiceEventRegistry.removeIdentifier(for: practiceId)
@@ -439,7 +461,10 @@ final class CalendarManager: ObservableObject {
             for: practiceId,
             bandId: bandId,
             legacyIdentifier: legacyEventIdentifier,
-            eventExists: { eventStore.event(withIdentifier: $0) != nil }
+            eventExists: {
+                guard let event = eventStore.event(withIdentifier: $0) else { return false }
+                return Self.canAccessCalendar(title: event.calendar?.title, isLocalBuild: Self.isLocalBuild)
+            }
         )
     }
 
@@ -449,18 +474,26 @@ final class CalendarManager: ObservableObject {
 #if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
         return
 #else
-        guard let data = UserDefaults.standard.data(forKey: prefsKey),
+        guard let data = preferences.data(forKey: prefsKey),
               let prefs = try? JSONDecoder().decode(CalendarPrefs.self, from: data) else { return }
         selectedCalendarIds = Set(prefs.selectedCalendarIds)
-        lastSyncDate = UserDefaults.standard.object(
+        lastSyncDate = preferences.object(
             forKey: CalendarPreferenceKeys.lastSyncDate
         ) as? Date ?? prefs.lastSyncDate
-        practiceCalendarName = prefs.calendarName ?? "Band Practice"
+        practiceCalendarName = Self.calendarName(prefs.calendarName ?? "Band Practice", isLocalBuild: Self.isLocalBuild)
         autoSync = prefs.autoSync ?? true
         practiceCalendarIdentifier = prefs.calendarIdentifier
         practiceEventRegistry = prefs.practiceEventRegistry ?? PracticeEventRegistry()
         if let hex = prefs.calendarColorHex, !hex.isEmpty {
             practiceCalendarColor = Color(hex: hex)
+        }
+        // Old local builds may have saved identifiers belonging to production.
+        // Detach those references without renaming or removing the shared calendar.
+        if Self.isLocalBuild, !preferences.bool(forKey: "localCalendarIsolationV1") {
+            practiceCalendarIdentifier = nil
+            practiceEventRegistry = PracticeEventRegistry()
+            preferences.set(true, forKey: "localCalendarIsolationV1")
+            savePrefs()
         }
 #endif
     }
@@ -479,10 +512,10 @@ final class CalendarManager: ObservableObject {
             practiceEventRegistry: practiceEventRegistry
         )
         if let data = try? JSONEncoder().encode(prefs) {
-            UserDefaults.standard.set(data, forKey: prefsKey)
+            preferences.set(data, forKey: prefsKey)
         }
         if let lastSyncDate {
-            UserDefaults.standard.set(lastSyncDate, forKey: CalendarPreferenceKeys.lastSyncDate)
+            preferences.set(lastSyncDate, forKey: CalendarPreferenceKeys.lastSyncDate)
         }
 #endif
     }

@@ -16,7 +16,7 @@ struct LocationSearchView: View {
                 } else {
                     ForEach(completer.results, id: \.self) { result in
                         Button {
-                            selectedLocation = result.title
+                            selectedLocation = [result.title, result.subtitle].filter { !$0.isEmpty }.joined(separator: ", ")
                             dismiss()
                         } label: {
                             LocationRow(name: result.title, address: result.subtitle)

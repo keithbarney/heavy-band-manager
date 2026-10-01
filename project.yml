@@ -9,8 +9,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    MARKETING_VERSION: "1.3.0"
-    CURRENT_PROJECT_VERSION: 8
+    MARKETING_VERSION: "1.3.2"
+    CURRENT_PROJECT_VERSION: 10
     DEVELOPMENT_TEAM: BXKNJTU253
     CODE_SIGN_STYLE: Automatic
     TARGETED_DEVICE_FAMILY: "1,2"
@@ -41,6 +41,7 @@ targets:
     platform: iOS
     sources:
       - HeavyBandManager
+      - Shared
     settings:
       base:
         INFOPLIST_FILE: HeavyBandManager/Info.plist
@@ -49,12 +50,22 @@ targets:
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: "NO"
       configs:
         Debug:
-          PRODUCT_BUNDLE_IDENTIFIER: com.keithbarney.heavybandmanager.local
+          BAND_APP_BUNDLE_IDENTIFIER: com.keithbarney.heavybandmanager.local
+          PRODUCT_BUNDLE_IDENTIFIER: "$(BAND_APP_BUNDLE_IDENTIFIER)"
+          WIDGET_APP_GROUP: group.com.keithbarney.heavybandmanager.local
+          PRACTICE_URL_SCHEME: bandpractice-local
           BUNDLE_DISPLAY_NAME: Band Practice (L)
+          APS_ENVIRONMENT: development
+          PUSH_ENVIRONMENT: sandbox
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) $(ONBOARDING_PREVIEW_CONDITION) $(AVAILABILITY_TAB_PREVIEW_CONDITION)"
         Release:
-          PRODUCT_BUNDLE_IDENTIFIER: com.keithbarney.heavybandmanager
+          BAND_APP_BUNDLE_IDENTIFIER: com.keithbarney.heavybandmanager
+          PRODUCT_BUNDLE_IDENTIFIER: "$(BAND_APP_BUNDLE_IDENTIFIER)"
+          WIDGET_APP_GROUP: group.com.keithbarney.heavybandmanager
+          PRACTICE_URL_SCHEME: bandpractice
           BUNDLE_DISPLAY_NAME: Band Practice
+          APS_ENVIRONMENT: production
+          PUSH_ENVIRONMENT: production
     postBuildScripts:
       - name: Copy isolated review artwork
         basedOnDependencyAnalysis: false
@@ -68,13 +79,52 @@ targets:
             rm -rf "$artwork_destination"
           fi
     dependencies:
+      - target: BandPracticeWidget
+        embed: true
       - package: Supabase
       - package: DialKit
     entitlements:
       path: HeavyBandManager/HeavyBandManager.entitlements
       properties:
+        com.apple.security.application-groups:
+          - "$(WIDGET_APP_GROUP)"
         com.apple.developer.applesignin:
           - Default
+        aps-environment: "$(APS_ENVIRONMENT)"
+
+  BandPracticeWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - BandPracticeWidget
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: "$(BAND_APP_BUNDLE_IDENTIFIER).widgets"
+        APPLICATION_EXTENSION_API_ONLY: "YES"
+        SKIP_INSTALL: "YES"
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) $(ONBOARDING_PREVIEW_CONDITION) $(AVAILABILITY_TAB_PREVIEW_CONDITION)"
+      configs:
+        Debug:
+          BAND_APP_BUNDLE_IDENTIFIER: com.keithbarney.heavybandmanager.local
+          WIDGET_APP_GROUP: group.com.keithbarney.heavybandmanager.local
+        Release:
+          BAND_APP_BUNDLE_IDENTIFIER: com.keithbarney.heavybandmanager
+          WIDGET_APP_GROUP: group.com.keithbarney.heavybandmanager
+    info:
+      path: BandPracticeWidget/Info.plist
+      properties:
+        CFBundleDisplayName: Band Practice
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        WidgetAppGroup: "$(WIDGET_APP_GROUP)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: BandPracticeWidget/BandPracticeWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - "$(WIDGET_APP_GROUP)"
 
   HeavyBandManagerTests:
     type: bundle.unit-test

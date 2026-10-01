@@ -31,8 +31,10 @@ enum BackgroundSyncManager {
     private static func handleSync(task: BGAppRefreshTask) {
         let syncTask = Task {
             do {
+                let practicesSynced = await PracticeCalendarSync.refresh()
+                await PracticeWidgetSync.shared.refresh(force: true)
                 try await performSync()
-                task.setTaskCompleted(success: true)
+                task.setTaskCompleted(success: practicesSynced)
             } catch {
                 print("[BackgroundSync] Error: \(error)")
                 task.setTaskCompleted(success: false)
@@ -166,22 +168,28 @@ enum BackgroundSyncManager {
                 current = calendar.date(byAdding: .day, value: 1, to: current)!
             }
 
-            // Delete old slots for this member in date range
-            try await Config.supabase
-                .from("availability_slots")
-                .delete()
-                .eq("member_id", value: member.id.uuidString)
-                .eq("band_id", value: member.bandId.uuidString)
-                .gte("date", value: startStr)
-                .lte("date", value: endStr)
+            // The RPC locks and rechecks this membership before replacing any rows.
+            // A stale task returns no revision without touching the newer availability choice.
+            let slotPayload = allSlots.map { AnyJSON.object($0) }
+            let params: [String: AnyJSON] = [
+                "p_member_id": .string(member.id.uuidString),
+                "p_band_id": .string(member.bandId.uuidString),
+                "p_expected_revision": .integer(member.availabilityRevision),
+                "p_start_date": .string(startStr),
+                "p_end_date": .string(endStr),
+                "p_slots": .array(slotPayload),
+            ]
+            try Task.checkCancellation()
+            let revision: Int? = try await Config.supabase
+                .rpc("replace_calendar_availability", params: params)
                 .execute()
-
-            // Insert new slots
-            if !allSlots.isEmpty {
-                try await Config.supabase
-                    .from("availability_slots")
-                    .insert(allSlots)
-                    .execute()
+                .value
+            guard revision != nil else {
+                throw NSError(
+                    domain: "BackgroundSync",
+                    code: 409,
+                    userInfo: [NSLocalizedDescriptionKey: "Availability changed while the calendar refresh was running"]
+                )
             }
         }
 

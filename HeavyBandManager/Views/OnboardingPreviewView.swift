@@ -103,7 +103,9 @@ extension BandManager {
             name: member.name, instrument: member.instrument, color: member.color,
             practiceWindowStart: windowStart ?? member.practiceWindowStart, practiceWindowEnd: windowEnd ?? member.practiceWindowEnd,
             avatarUrl: member.avatarUrl, availabilityMode: mode,
-            availabilitySetupComplete: complete, joinedAt: member.joinedAt
+            availabilitySetupComplete: complete,
+            availabilityRevision: member.availabilityRevision + 1,
+            joinedAt: member.joinedAt
         )
         let updatedBand = BandWithMembers(
             id: band.id, name: band.name, creatorId: band.creatorId, leaderId: band.leaderId,

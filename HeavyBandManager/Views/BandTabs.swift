@@ -3,6 +3,7 @@ import UIKit
 import UserNotifications
 
 struct BandTabs: View {
+    @EnvironmentObject private var practiceNavigation: PracticeNavigation
     @EnvironmentObject var bandManager: BandManager
     @EnvironmentObject var calendarManager: CalendarManager
     @Environment(\.scenePhase) private var scenePhase
@@ -49,6 +50,21 @@ struct BandTabs: View {
         .tabViewStyle(.sidebarAdaptable)
         .tint(Color.themeAccent)
         .task { await checkPermissions() }
+        .task(id: practiceNavigation.requestID) {
+            guard let route = practiceNavigation.pending else { return }
+            selectedTab = 0
+            do {
+                let day = try await bandManager.preparePracticeRoute(route)
+                guard !Task.isCancelled, practiceNavigation.pending == route else { return }
+                practiceNavigation.day = day
+                practiceNavigation.pending = nil
+            } catch {
+                guard !Task.isCancelled, practiceNavigation.pending == route else { return }
+                practiceNavigation.pending = nil
+                toastManager.show("Practice unavailable. Refresh your band's calendar.")
+            }
+        }
+        .onChange(of: practiceNavigation.requestID) { _, _ in selectedTab = 0 }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 Task { await checkPermissions() }
@@ -86,7 +102,7 @@ struct BandTabs: View {
                 Button("Cancel", role: .cancel) {}
             }
         } message: {
-            Text("Get notified when bandmates join and when practices are scheduled. Optional.")
+            Text("Get notified when practices are scheduled, changed, or cancelled, and when bandmates join. Optional.")
         }
     }
 

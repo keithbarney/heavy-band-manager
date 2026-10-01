@@ -99,6 +99,7 @@ struct AvailabilityTabPreviewView: View {
                         Picker("Review scenario", selection: $scenario) {
                             ForEach(AvailabilityTabScenario.allCases) { Text($0.rawValue).tag($0) }
                         }
+                        .accessibilityIdentifier("mock-review-scenario")
                         .pickerStyle(.menu).font(.subheadline)
                         .fixedSize(horizontal: true, vertical: false)
                     }
@@ -120,14 +121,19 @@ private struct AvailabilityTabReviewContent: View {
     let scenario: AvailabilityTabScenario
     @ObservedObject var band: BandManager
     @ObservedObject var calendar: CalendarManager
+    @State private var showAvailabilitySheet = false
 
     var body: some View {
         VStack(spacing: 0) {
             if scenario == .failure {
                 Toggle("Simulate failed save", isOn: $band.previewSaveFails)
                     .padding(.horizontal).dynamicTypeSize(.large)
+                Button("Review availability in sheet") { showAvailabilitySheet = true }
             }
             BandTabs(initialTab: scenario.initialTab)
+        }
+        .sheet(isPresented: $showAvailabilitySheet) {
+            NavigationStack { MyAvailabilityView() }
         }
         .confirmationDialog("Calendar access (mock)", isPresented: $calendar.previewPermissionPrompt, titleVisibility: .visible) {
             Button("Allow full access") { calendar.setPreviewAuthorization(.fullAccess) }
@@ -139,6 +145,7 @@ extension BandManager {
     func loadAvailabilityTabPreview(scenario: String = "Typical band") {
         let now = Date()
         let minorThreat = ProcessInfo.processInfo.arguments.contains("--screenshot-band=minor-threat")
+        let widgetReview = WidgetReviewMode.isEnabled
         let marketingStory = ProcessInfo.processInfo.arguments.contains("--screenshot-story")
         let bandID = UUID(uuidString: "10000000-0000-0000-0000-000000000001")!
         let names = scenario == "Long names" ? ["Alexandra Montgomery-Williams", "Christopher Rivera-Sanchez", "Sam", "Jamie"] : minorThreat ? ["Ian MacKaye", "Lyle Preslar", "Brian Baker", "Jeff Nelson"] : ["Alex", "Riley", "Sam", "Jamie"]
@@ -171,26 +178,82 @@ extension BandManager {
                 }
             }
         }
-        let practiceOffsets = scenario == "Setup needed" || scenario == "No matching times" ? [] : marketingStory ? [8, 11, 15, 17] : [4]
+        let practiceOffsets = scenario == "Setup needed" || scenario == "No matching times" ? [] : marketingStory ? [8, 11, 15, 17] : widgetReview ? [1, 3, 5, 8, 11, 15] : [4]
         practices = practiceOffsets.map { offset in
-            ScheduledPractice(id: UUID(), bandId: bandID, date: day(offset), startMinutes: 1140, endMinutes: 1260,
+            ScheduledPractice(id: UUID(uuidString: String(format: "20000000-0000-0000-0000-%012d", offset))!, bandId: bandID, date: day(offset), startMinutes: 1140, endMinutes: 1260,
                 location: band.defaultPracticeLocation, scheduledBy: Self.onboardingPreviewUserId, scheduledAt: now, calendarEventId: nil)
+        }
+        if widgetReview {
+            let saved = PracticeWidgetStore().read()?.bands.first { $0.id == bandID }
+            if let saved, scenario != "No matching times", scenario != "Setup needed",
+               !ProcessInfo.processInfo.arguments.contains("--reset-widget-review") {
+                practices = saved.practices.map {
+                    ScheduledPractice(id: $0.id, bandId: $0.bandId, date: $0.date, startMinutes: $0.startMinutes,
+                        endMinutes: $0.endMinutes, location: $0.location, scheduledBy: Self.onboardingPreviewUserId,
+                        scheduledAt: now, calendarEventId: nil)
+                }
+            }
+            let secondID = UUID(uuidString: "10000000-0000-0000-0000-000000000002")!
+            let secondMembers = members.map { member in
+                BandMember(id: UUID(), bandId: secondID, userId: member.userId, name: member.name,
+                    instrument: member.instrument, color: member.color, practiceWindowStart: member.practiceWindowStart,
+                    practiceWindowEnd: member.practiceWindowEnd, avatarUrl: member.avatarUrl,
+                    availabilityMode: member.availabilityMode, availabilitySetupComplete: member.availabilitySetupComplete,
+                    availabilityRevision: member.availabilityRevision,
+                    joinedAt: member.joinedAt)
+            }
+            let second = BandWithMembers(id: secondID, name: "Sunday Static", creatorId: band.creatorId,
+                leaderId: band.leaderId, defaultPracticeLocation: "Eastside Studio", inviteCode: "MOCK02",
+                logoUrl: nil, createdAt: now, minPracticeMinutes: 60, maxPracticeMinutes: 120,
+                minMembersRequired: 3, bandMembers: secondMembers)
+            bands.append(second)
+            let secondPractices = [2, 6, 10].enumerated().map { index, offset in
+                ScheduledPractice(id: UUID(uuidString: String(format: "30000000-0000-0000-0000-%012d", index + 1))!,
+                    bandId: secondID, date: day(offset), startMinutes: 1080, endMinutes: 1200,
+                    location: "Eastside Studio", scheduledBy: band.creatorId, scheduledAt: now, calendarEventId: nil)
+            }
+            PracticeWidgetSync.shared.publish(band: second, practices: secondPractices, account: Self.onboardingPreviewUserId)
+            PracticeWidgetSync.shared.publish(band: band, practices: practices, account: Self.onboardingPreviewUserId)
         }
         weeklyRules = [1, 4].map { WeeklyAvailabilityRule(id: UUID(), memberId: members[0].id, bandId: bandID, dayOfWeek: $0, startMinutes: 1140, endMinutes: 1320) }
     }
 
-    func updateReviewBand(name: String? = nil, minimum: Int? = nil, maximum: Int? = nil, requiredMembers: Int? = nil) {
+    func updateReviewBand(name: String? = nil, logoURL: String? = nil, minimum: Int? = nil, maximum: Int? = nil, requiredMembers: Int? = nil) {
         guard let band = currentBand else { return }
         let updated = BandWithMembers(
             id: band.id, name: name ?? band.name, creatorId: band.creatorId, leaderId: band.leaderId,
             defaultPracticeLocation: band.defaultPracticeLocation, inviteCode: band.inviteCode,
-            logoUrl: band.logoUrl, createdAt: band.createdAt,
+            logoUrl: logoURL ?? band.logoUrl, createdAt: band.createdAt,
             minPracticeMinutes: minimum ?? band.minPracticeMinutes,
             maxPracticeMinutes: maximum ?? band.maxPracticeMinutes,
             minMembersRequired: requiredMembers ?? band.minMembersRequired, bandMembers: band.bandMembers
         )
         currentBand = updated
         bands = bands.map { $0.id == band.id ? updated : $0 }
+    }
+
+    func updateReviewMember(_ memberID: UUID, name: String? = nil, instrument: String? = nil, avatarURL: String? = nil) {
+        guard let band = currentBand,
+              let member = band.bandMembers.first(where: { $0.id == memberID }) else { return }
+        let updatedMember = BandMember(
+            id: member.id, bandId: member.bandId, userId: member.userId,
+            name: name ?? member.name, instrument: instrument ?? member.instrument,
+            color: member.color, practiceWindowStart: member.practiceWindowStart,
+            practiceWindowEnd: member.practiceWindowEnd, avatarUrl: avatarURL ?? member.avatarUrl,
+            availabilityMode: member.availabilityMode,
+            availabilitySetupComplete: member.availabilitySetupComplete,
+            availabilityRevision: member.availabilityRevision, joinedAt: member.joinedAt
+        )
+        let updatedBand = BandWithMembers(
+            id: band.id, name: band.name, creatorId: band.creatorId, leaderId: band.leaderId,
+            defaultPracticeLocation: band.defaultPracticeLocation, inviteCode: band.inviteCode,
+            logoUrl: band.logoUrl, createdAt: band.createdAt,
+            minPracticeMinutes: band.minPracticeMinutes, maxPracticeMinutes: band.maxPracticeMinutes,
+            minMembersRequired: band.minMembersRequired,
+            bandMembers: band.bandMembers.map { $0.id == memberID ? updatedMember : $0 }
+        )
+        currentBand = updatedBand
+        bands = bands.map { $0.id == band.id ? updatedBand : $0 }
     }
 
 }

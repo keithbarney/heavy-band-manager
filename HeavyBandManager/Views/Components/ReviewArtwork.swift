@@ -5,11 +5,21 @@ import SwiftUI
 struct ReviewArtwork {
     let image: UIImage
     let region: CGRect?
+    let accessibilityLabel: String
 
+    @MainActor
     static func resolve(_ value: String?) -> ReviewArtwork? {
         #if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+        guard let value, let url = URL(string: value) else { return nil }
+        if url.scheme == "mock-upload", let image = MockReviewImageStore.image(for: value) {
+            return ReviewArtwork(
+                image: image,
+                region: nil,
+                accessibilityLabel: url.host == "logo" ? "Band logo" : "Member photo"
+            )
+        }
         guard ProcessInfo.processInfo.arguments.contains("--screenshot-band=minor-threat"),
-              let value, let url = URL(string: value), url.scheme == "mock-artwork" else { return nil }
+              url.scheme == "mock-artwork" else { return nil }
         let file: String
         let region: CGRect?
         switch url.host {
@@ -22,7 +32,11 @@ struct ReviewArtwork {
         }
         guard let path = Bundle.main.path(forResource: file, ofType: nil, inDirectory: "MockArtwork"),
               let image = UIImage(contentsOfFile: path) else { return nil }
-        return ReviewArtwork(image: image, region: region)
+        return ReviewArtwork(
+            image: image,
+            region: region,
+            accessibilityLabel: region == nil ? "Band logo" : "Member photo"
+        )
         #else
         return nil
         #endif
@@ -54,9 +68,26 @@ struct ReviewArtworkView: View {
         .clipShape(Circle())
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isImage)
-        .accessibilityLabel(artwork.region == nil ? "Band logo" : "Member photo")
+        .accessibilityLabel(artwork.accessibilityLabel)
     }
 }
+
+#if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
+@MainActor
+enum MockReviewImageStore {
+    private static var images: [String: UIImage] = [:]
+
+    static func store(_ data: Data, for reference: String) -> Bool {
+        guard let image = UIImage(data: data) else { return false }
+        images[reference] = image
+        return true
+    }
+
+    static func image(for reference: String) -> UIImage? {
+        images[reference]
+    }
+}
+#endif
 
 struct BandLogoImage: View {
     let url: URL

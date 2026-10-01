@@ -131,6 +131,7 @@ final class AuthManager: ObservableObject {
         defer { isLoading = false }
 
         do {
+            try await PracticePushManager.shared.unregister()
             try await Config.supabase.functions.invoke(
                 "delete-account",
                 options: FunctionInvokeOptions(method: .post)
@@ -140,6 +141,7 @@ final class AuthManager: ObservableObject {
             user = nil
             return true
         } catch {
+            PracticePushManager.shared.resumeRegistrationAfterFailedSignOut()
             self.error = error.localizedDescription
             return false
         }
@@ -149,10 +151,12 @@ final class AuthManager: ObservableObject {
 
     func signOut() async {
         do {
+            try await PracticePushManager.shared.unregister()
             try await Config.supabase.auth.signOut()
             session = nil
             user = nil
         } catch {
+            PracticePushManager.shared.resumeRegistrationAfterFailedSignOut()
             self.error = error.localizedDescription
         }
     }

@@ -1,5 +1,6 @@
 #if DEBUG && targetEnvironment(simulator) && AVAILABILITY_TAB_PREVIEW
 import XCTest
+import UIKit
 @testable import HeavyBandManager
 
 @MainActor
@@ -80,6 +81,75 @@ final class AvailabilityTabReviewTests: XCTestCase {
         await store.calendar.requestAccess()
         XCTAssertTrue(store.calendar.previewPermissionPrompt)
         XCTAssertFalse(store.calendar.isAuthorized)
+    }
+
+    func testPracticeFailureRetryDuplicateAndCancellationStayInMemory() async throws {
+        let store = AvailabilityTabReviewStore(.typical)
+        let date = "2099-01-01"
+        store.band.previewSaveFails = true
+        do {
+            try await store.band.schedulePractice(date: date, startMinutes: 1140, endMinutes: 1260, location: "Mock", calendarManager: store.calendar)
+            XCTFail("Expected simulated scheduling failure")
+        } catch {
+            XCTAssertFalse(store.band.practices.contains { $0.date == date })
+        }
+        store.band.previewSaveFails = false
+        let practice = try await store.band.schedulePractice(date: date, startMinutes: 1140, endMinutes: 1260, location: "Mock", calendarManager: store.calendar)
+        XCTAssertTrue(store.band.practices.contains { $0.id == practice.id })
+        do {
+            try await store.band.schedulePractice(date: date, startMinutes: 1140, endMinutes: 1260, location: "Mock", calendarManager: store.calendar)
+            XCTFail("Expected duplicate practice rejection")
+        } catch {
+            XCTAssertEqual(store.band.practices.filter { $0.date == date }.count, 1)
+        }
+        store.band.previewSaveFails = true
+        do {
+            try await store.band.cancelPractice(practice.id, calendarManager: store.calendar)
+            XCTFail("Expected simulated cancellation failure")
+        } catch {
+            XCTAssertTrue(store.band.practices.contains { $0.id == practice.id })
+        }
+        store.band.previewSaveFails = false
+        try await store.band.cancelPractice(practice.id, calendarManager: store.calendar)
+        XCTAssertFalse(store.band.practices.contains { $0.id == practice.id })
+    }
+
+    func testPracticeCalendarRefreshReportsFailureAndRetry() async {
+        let store = AvailabilityTabReviewStore(.failure)
+        let failed = await store.band.syncMissingCalendarEvents(calendarManager: store.calendar)
+        XCTAssertFalse(failed.isComplete)
+        XCTAssertGreaterThan(failed.failed, 0)
+        store.band.previewSaveFails = false
+        let retried = await store.band.syncMissingCalendarEvents(calendarManager: store.calendar)
+        XCTAssertTrue(retried.isComplete)
+        XCTAssertEqual(retried.restored, retried.attempted)
+    }
+
+    func testProfileLogoLeaveAndDeleteActionsStayInMemory() async throws {
+        let organizer = AvailabilityTabReviewStore(.band).band
+        let current = try XCTUnwrap(organizer.currentMember)
+        let upload = try XCTUnwrap(UIImage(systemName: "person.crop.circle.fill")?.pngData())
+        await organizer.updateMemberName("Updated Member")
+        await organizer.updateMemberInstrument("Keys", memberId: current.id)
+        await organizer.uploadAvatar(imageData: upload)
+        await organizer.uploadBandLogo(imageData: upload)
+        XCTAssertEqual(organizer.currentMember?.name, "Updated Member")
+        XCTAssertEqual(organizer.currentMember?.instrument, "Keys")
+        XCTAssertTrue(organizer.currentMember?.avatarUrl?.hasPrefix("mock-upload://") == true)
+        XCTAssertTrue(organizer.currentBand?.logoUrl?.hasPrefix("mock-upload://") == true)
+        XCTAssertNotNil(ReviewArtwork.resolve(organizer.currentMember?.avatarUrl))
+        XCTAssertNotNil(ReviewArtwork.resolve(organizer.currentBand?.logoUrl))
+
+        let member = AvailabilityTabReviewStore(.bandMember).band
+        let leftBandID = member.currentBand?.id
+        await member.leaveBand()
+        XCTAssertFalse(member.bands.contains { $0.id == leftBandID })
+        XCTAssertNotEqual(member.currentBand?.id, leftBandID)
+
+        let deletedBandID = organizer.currentBand?.id
+        await organizer.deleteBand()
+        XCTAssertFalse(organizer.bands.contains { $0.id == deletedBandID })
+        XCTAssertNotEqual(organizer.currentBand?.id, deletedBandID)
     }
 }
 #endif

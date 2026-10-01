@@ -5,9 +5,11 @@ import UserNotifications
 @main
 struct BandManagerApp: App {
     @UIApplicationDelegateAdaptor private var appDelegate: AppDelegate
+    @StateObject private var practiceNavigation = PracticeNavigation()
     @StateObject private var authManager = AuthManager()
     @StateObject private var bandManager = BandManager()
-    @StateObject private var calendarManager = CalendarManager()
+    @StateObject private var calendarManager = PracticeCalendarSync.calendar
+    @StateObject private var practicePush = PracticePushManager.shared
     @StateObject private var toastManager = ToastManager()
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @Environment(\.scenePhase) private var scenePhase
@@ -21,6 +23,15 @@ struct BandManagerApp: App {
                 AuthGate()
 #endif
             }
+                .modifier(FeedbackLifecycle())
+                .environmentObject(practiceNavigation)
+                .onOpenURL { practiceNavigation.open($0) }
+                .onChange(of: practicePush.pendingRoute) { _, url in
+                    if let url {
+                        practiceNavigation.open(url)
+                        practicePush.pendingRoute = nil
+                    }
+                }
                 .environmentObject(authManager)
                 .environmentObject(bandManager)
                 .environmentObject(calendarManager)
@@ -35,7 +46,13 @@ struct BandManagerApp: App {
                     calendarManager.initialize()
 #else
                     await authManager.initialize()
+                    PracticeWidgetSync.shared.setAccount(authManager.user?.id)
                     calendarManager.initialize()
+                    practicePush.refreshRegistration()
+                    if let route = practicePush.pendingRoute {
+                        practiceNavigation.open(route)
+                        practicePush.pendingRoute = nil
+                    }
                     bandManager.onMemberJoined = { name in
                         toastManager.show("\(name) joined the band")
                         sendLocalNotification(
@@ -49,15 +66,8 @@ struct BandManagerApp: App {
                     bandManager.onBandDeleted = { name in
                         toastManager.show("\(name) deleted")
                     }
-                    bandManager.onPracticeScheduled = { body in
-                        sendLocalNotification(title: "Practice Scheduled", body: body)
-                    }
-                    bandManager.onPracticeUpdated = { body in
-                        sendLocalNotification(title: "Practice Updated", body: body)
-                    }
-                    bandManager.onPracticeCancelled = { body in
-                        sendLocalNotification(title: "Practice Cancelled", body: body)
-                    }
+                    // Practice alerts come from the server, avoiding a second local
+                    // alert when the same change arrives over Realtime.
                     bandManager.onPracticeDeleted = { practiceId in
                         Task {
                             try? await calendarManager.deletePracticeEvent(practiceId: practiceId)
@@ -65,7 +75,7 @@ struct BandManagerApp: App {
                     }
                     bandManager.onPracticeListChanged = {
                         Task {
-                            await bandManager.syncMissingCalendarEvents(
+                            _ = await bandManager.syncMissingCalendarEvents(
                                 calendarManager: calendarManager,
                                 reconcileStaleEvents: true
                             )
@@ -73,11 +83,13 @@ struct BandManagerApp: App {
                     }
 #endif
                 }
-                .onChange(of: authManager.user) { _, newUser in
+                .onChange(of: authManager.user) { oldUser, newUser in
+                    practicePush.accountChanged(preservePendingRoute: oldUser == nil && newUser != nil)
+                    PracticeWidgetSync.shared.setAccount(newUser?.id)
                     if newUser != nil {
                         Task {
                             if await bandManager.loadBands() {
-                                await bandManager.syncMissingCalendarEvents(
+                                _ = await bandManager.syncMissingCalendarEvents(
                                     calendarManager: calendarManager,
                                     reconcileStaleEvents: true
                                 )
@@ -90,7 +102,7 @@ struct BandManagerApp: App {
                 .onChange(of: calendarManager.isAuthorized) { _, authorized in
                     if authorized, authManager.user != nil {
                         Task {
-                            await bandManager.syncMissingCalendarEvents(
+                            _ = await bandManager.syncMissingCalendarEvents(
                                 calendarManager: calendarManager,
                                 reconcileStaleEvents: true
                             )
@@ -99,7 +111,15 @@ struct BandManagerApp: App {
                 }
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .active {
-                        Task { await autoSyncIfNeeded() }
+                        Task {
+                            practicePush.refreshRegistration()
+                            await PracticeWidgetSync.shared.refresh()
+                            _ = await PracticeCalendarSync.refresh(force: false)
+                            if authManager.user != nil, await bandManager.loadPractices() {
+                                _ = await bandManager.syncMissingCalendarEvents(calendarManager: calendarManager, reconcileStaleEvents: true)
+                            }
+                            await autoSyncIfNeeded()
+                        }
                     }
                 }
         }
@@ -161,7 +181,11 @@ struct BandManagerApp: App {
         let calendar = Calendar.current
         let start = calendar.startOfDay(for: Date())
         let end = calendar.date(byAdding: .month, value: 6, to: start)!
-        await bandManager.syncCalendar(calendarManager: calendarManager, from: start, to: end)
+        do {
+            try await bandManager.syncCalendar(calendarManager: calendarManager, from: start, to: end)
+        } catch {
+            bandManager.error = "Automatic availability could not refresh. Your previous availability is still published."
+        }
         BackgroundSyncManager.scheduleNext()
     }
 }
@@ -171,6 +195,41 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         return true
+    }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Task { @MainActor in PracticePushManager.shared.receivedToken(deviceToken) }
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        Task { @MainActor in PracticePushManager.shared.registrationFailed() }
+    }
+
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        guard PracticePush(userInfo: userInfo) != nil else { completionHandler(.noData); return }
+        Task { @MainActor in
+            var completed = false
+            let operation = Task { @MainActor in
+                let success = await PracticeCalendarSync.refresh()
+                guard !Task.isCancelled, !completed else { return }
+                completed = true
+                completionHandler(success ? .newData : .failed)
+                await PracticeWidgetSync.shared.refresh(force: true)
+            }
+            // Finish within iOS's background notification budget, including slow/offline requests.
+            try? await Task.sleep(for: .seconds(25))
+            guard !completed else { return }
+            completed = true
+            operation.cancel()
+            completionHandler(.failed)
+        }
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        guard let push = PracticePush(userInfo: response.notification.request.content.userInfo) else { return }
+        await MainActor.run { PracticePushManager.shared.pendingRoute = push.url }
+        _ = await PracticeCalendarSync.refresh()
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {

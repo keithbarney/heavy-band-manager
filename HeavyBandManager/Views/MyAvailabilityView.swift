@@ -79,11 +79,13 @@ struct MyAvailabilityView: View {
             if let errorMessage {
                 Section {
                     Text(errorMessage)
+                    FeedbackButton(label: "Report a Scheduling Problem", category: .scheduling, source: "Availability save failure")
                         .foregroundStyle(.red)
                         .font(.footnote)
                 }
             }
         }
+        .modifier(FeedbackPresenter())
         .disabled(isSaving)
         .modifier(ReadableListLayout())
         .navigationTitle("Availability")
@@ -318,9 +320,9 @@ struct MyAvailabilityView: View {
                 let calendar = Calendar.current
                 let start = calendar.startOfDay(for: Date())
                 let end = calendar.date(byAdding: .month, value: 6, to: start)!
-                await bandManager.syncCalendar(calendarManager: calendarManager, from: start, to: end)
+                try await bandManager.syncCalendar(calendarManager: calendarManager, from: start, to: end)
             }
-            await bandManager.syncMissingCalendarEvents(calendarManager: calendarManager)
+            _ = await bandManager.syncMissingCalendarEvents(calendarManager: calendarManager)
             if let onFinished {
                 onFinished()
             } else {

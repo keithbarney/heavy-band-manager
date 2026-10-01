@@ -5,6 +5,7 @@ import UIKit
 struct BandSettingsView: View {
     @EnvironmentObject private var bandManager: BandManager
     @EnvironmentObject private var toastManager: ToastManager
+    @State private var editingLocation = false
     @State private var showBandPicker = false
     @State private var editingBandName = false
     @State private var bandNameText = ""
@@ -107,9 +108,30 @@ struct BandSettingsView: View {
                     Text("Band")
                 }
 
+                if !bandManager.isLeader {
+                    Section("Scheduling") {
+                        LabeledContent("Default Practice Location", value: bandManager.currentBand?.defaultPracticeLocation.flatMap { $0.isEmpty ? nil : $0 } ?? "Not set")
+                    }
+                }
+
                 // MARK: - Band scheduling
                 if bandManager.isLeader {
                     Section("Scheduling") {
+                        Button {
+                            editingLocation = true
+                        } label: {
+                            LabeledContent("Default Practice Location", value: bandManager.currentBand?.defaultPracticeLocation.flatMap { $0.isEmpty ? nil : $0 } ?? "Not set")
+                        }
+                        .foregroundStyle(.primary)
+                        .accessibilityIdentifier("edit-default-practice-location")
+                        .sheet(isPresented: $editingLocation) {
+                            PracticeLocationEditor(title: "Default Practice Location", location: bandManager.currentBand?.defaultPracticeLocation,
+                                explanation: "Applies to newly scheduled practices. Existing practices keep their own location.") { location in
+                                try await bandManager.setDefaultPracticeLocation(location)
+                                toastManager.show("Default location saved", type: .success)
+                            }
+                        }
+
                         NavigationLink {
                             practiceDurationPicker
                         } label: {
@@ -175,6 +197,9 @@ struct BandSettingsView: View {
                         }
                     }
 
+                }
+                Section("Feedback") {
+                    FeedbackButton(label: "Report a Scheduling Problem", category: .scheduling, source: "Band details", context: bandManager.currentBand?.name)
                 }
             }
             .listStyle(.insetGrouped)

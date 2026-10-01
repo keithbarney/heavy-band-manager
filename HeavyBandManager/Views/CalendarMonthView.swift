@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CalendarMonthView: View {
     var onOpenAvailability: (() -> Void)? = nil
+    @EnvironmentObject private var practiceNavigation: PracticeNavigation
     @EnvironmentObject var bandManager: BandManager
     @EnvironmentObject var calendarManager: CalendarManager
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -76,6 +77,8 @@ struct CalendarMonthView: View {
                 availabilitySetupCard
             }
 
+            UserSurveyInvitationCard()
+
             if showUpcoming {
                 upcomingPracticesList
             } else {
@@ -128,6 +131,12 @@ struct CalendarMonthView: View {
                 refreshCache()
             }
         }
+        .onChange(of: practiceNavigation.day, initial: true) { _, day in
+            sheetDate = day
+        }
+        .onChange(of: sheetDate) { _, day in
+            if day == nil { practiceNavigation.day = nil }
+        }
         .onChange(of: bandManager.slots) { _, _ in
             refreshCache()
         }
@@ -153,6 +162,9 @@ struct CalendarMonthView: View {
                     .environmentObject(bandManager)
                     .environmentObject(calendarManager)
             }
+        }
+        .sheet(isPresented: $practiceNavigation.showAllBands) {
+            AllBandsPracticesView()
         }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -348,12 +360,17 @@ struct CalendarMonthView: View {
     // MARK: - Upcoming Practices List
 
     private var upcomingPracticesList: some View {
-        let today = TimeHelpers.dateString(from: Date())
+        let now = Date()
         let upcoming = bandManager.practices
-            .filter { $0.date >= today }
-            .sorted { $0.date < $1.date }
+            .filter { ($0.widgetSummary.end() ?? .distantPast) > now }
+            .sorted { ($0.date, $0.startMinutes, $0.id.uuidString) < ($1.date, $1.startMinutes, $1.id.uuidString) }
 
-        return Group {
+        return VStack(spacing: 0) {
+            Button("View practices for all bands", systemImage: "person.3") {
+                practiceNavigation.showAllBands = true
+            }
+            .padding()
+            .accessibilityIdentifier("show-all-band-practices")
             if upcoming.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "calendar.badge.checkmark")

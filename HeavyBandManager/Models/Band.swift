@@ -39,6 +39,7 @@ struct BandMember: Identifiable, Codable {
     let avatarUrl: String?
     let availabilityMode: AvailabilityMode
     let availabilitySetupComplete: Bool
+    let availabilityRevision: Int
     let joinedAt: Date
 
     enum CodingKeys: String, CodingKey {
@@ -50,6 +51,7 @@ struct BandMember: Identifiable, Codable {
         case avatarUrl = "avatar_url"
         case availabilityMode = "availability_mode"
         case availabilitySetupComplete = "availability_setup_complete"
+        case availabilityRevision = "availability_revision"
         case joinedAt = "joined_at"
     }
 
@@ -65,6 +67,7 @@ struct BandMember: Identifiable, Codable {
         avatarUrl: String?,
         availabilityMode: AvailabilityMode = .calendar,
         availabilitySetupComplete: Bool = true,
+        availabilityRevision: Int = 0,
         joinedAt: Date
     ) {
         self.id = id
@@ -78,6 +81,7 @@ struct BandMember: Identifiable, Codable {
         self.avatarUrl = avatarUrl
         self.availabilityMode = availabilityMode
         self.availabilitySetupComplete = availabilitySetupComplete
+        self.availabilityRevision = availabilityRevision
         self.joinedAt = joinedAt
     }
 
@@ -94,6 +98,7 @@ struct BandMember: Identifiable, Codable {
         avatarUrl = try container.decodeIfPresent(String.self, forKey: .avatarUrl)
         availabilityMode = try container.decodeIfPresent(AvailabilityMode.self, forKey: .availabilityMode) ?? .calendar
         availabilitySetupComplete = try container.decodeIfPresent(Bool.self, forKey: .availabilitySetupComplete) ?? true
+        availabilityRevision = try container.decodeIfPresent(Int.self, forKey: .availabilityRevision) ?? 0
         joinedAt = try container.decodeIfPresent(Date.self, forKey: .joinedAt) ?? Date()
     }
 }
